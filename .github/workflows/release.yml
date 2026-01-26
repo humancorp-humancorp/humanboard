@@ -11,6 +11,8 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: "0"
+  SCCACHE_GHA_ENABLED: "true"
+  RUSTC_WRAPPER: "sccache"
 
 jobs:
   build-macos:
@@ -21,18 +23,23 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Cache cargo
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.7
+
+      - name: Cache cargo registry
         uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
 
       - name: Build release
-        run: cargo build --release
+        run: cargo build --profile release-ci
         env:
           RUSTFLAGS: "-Ctarget-feature=+aes,+sha2,+sha3,+neon"
 
       - name: Create app bundle and DMG
         run: |
           chmod +x build-app.sh
-          ./build-app.sh
+          ./build-app.sh release-ci
 
       - name: Calculate SHA256
         id: sha

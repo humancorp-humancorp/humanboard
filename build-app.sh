@@ -3,7 +3,10 @@ set -e
 
 cd "$(dirname "$0")"
 
-echo "Creating app bundle..."
+# Accept profile as argument (default: release)
+PROFILE="${1:-release}"
+
+echo "Creating app bundle (profile: $PROFILE)..."
 APP_NAME="Humanboard"
 APP_DIR="$APP_NAME.app"
 
@@ -12,7 +15,7 @@ mkdir -p "$APP_DIR/Contents/MacOS"
 mkdir -p "$APP_DIR/Contents/Resources"
 
 # Copy the binary
-cp target/release/humanboard "$APP_DIR/Contents/MacOS/Humanboard"
+cp "target/$PROFILE/humanboard" "$APP_DIR/Contents/MacOS/Humanboard"
 
 # Copy the icon
 cp assets/AppIcon.icns "$APP_DIR/Contents/Resources/AppIcon.icns"
