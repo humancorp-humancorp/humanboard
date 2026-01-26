@@ -350,31 +350,12 @@ pub fn render_trashed_board_card(
 pub fn render_empty_state(cx: &mut Context<crate::app::Humanboard>) -> Div {
     let fg = cx.theme().foreground;
     let muted_fg = cx.theme().muted_foreground;
-    let primary = cx.theme().primary;
-    let border = cx.theme().border;
 
     v_flex()
         .flex_1()
         .items_center()
         .justify_center()
         .gap_8()
-        // Hero icon with subtle background
-        .child(
-            div()
-                .w(px(120.0))
-                .h(px(120.0))
-                .rounded(px(24.0))
-                .border_1()
-                .border_color(border)
-                .flex()
-                .items_center()
-                .justify_center()
-                .child(
-                    Icon::new(IconName::LayoutDashboard)
-                        .size(px(48.0))
-                        .text_color(primary),
-                ),
-        )
         // Welcome text
         .child(
             v_flex()
