@@ -30,6 +30,20 @@ cargo build --release
 
 The app bundle will be at `Humanboard.app`.
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for project structure and coding guidelines.
+
+For architecture details, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+### Quick Start
+
+```bash
+cargo test           # Run tests
+cargo build          # Debug build
+cargo run            # Run in dev mode
+```
+
 ## License
 
 See [LICENSE](LICENSE).

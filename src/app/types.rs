@@ -1,6 +1,6 @@
 //! Types and enums used by the Humanboard application.
 
-use crate::pdf_webview::PdfWebView;
+use crate::webviews::PdfWebView;
 use gpui::Point;
 use gpui::Pixels;
 use gpui_component::input::InputState;

@@ -110,8 +110,8 @@ impl VirtualScrollState {
 
 /// A cached chunk of rows
 struct CachedChunk {
-    /// Starting row index
-    start_row: usize,
+    /// Starting row index (kept for debugging/future LRU logic)
+    _start_row: usize,
     /// Rows in this chunk
     rows: Vec<DataRow>,
     /// Last access time (for LRU eviction)
@@ -331,7 +331,7 @@ impl LazyDataSource {
             cache.insert(
                 chunk_idx,
                 CachedChunk {
-                    start_row: chunk_start,
+                    _start_row: chunk_start,
                     rows: rows.clone(),
                     last_access: std::time::Instant::now(),
                 },

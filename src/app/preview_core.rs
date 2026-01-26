@@ -4,7 +4,7 @@ use super::{FocusedPane, Humanboard, PreviewPanel, PreviewTab, SplitDirection, T
 use crate::constants::{DOCK_WIDTH, FOOTER_HEIGHT, HEADER_HEIGHT};
 use crate::data::DataSourceDelegate;
 use crate::focus::FocusContext;
-use crate::pdf_webview::PdfWebView;
+use crate::webviews::PdfWebView;
 use gpui::*;
 use gpui_component::input::InputState;
 use gpui_component::table::TableState;

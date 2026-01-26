@@ -4,7 +4,6 @@ use humanboard::board::{Board, BoardState};
 use humanboard::board_index::{BoardIndex, BoardMetadata};
 use humanboard::types::{CanvasItem, ItemContent};
 use gpui::{point, px};
-use std::collections::HashMap;
 
 #[test]
 fn test_new_board_workflow() {

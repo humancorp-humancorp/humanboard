@@ -16,14 +16,12 @@
 //! Enable profiling with `cargo build --features profiling` to see timing.
 
 use crate::app::Humanboard;
-use crate::audio_webview::AudioWebView;
 use crate::constants::HEADER_HEIGHT;
 use crate::data::{DataSourceDelegate, VirtualScrollState};
 use crate::markdown_card::{render_collapsed_code, render_collapsed_markdown};
 use crate::profile_scope;
 use crate::types::{CanvasItem, DataSource, ItemContent};
-use crate::video_webview::VideoWebView;
-use crate::youtube_webview::YouTubeWebView;
+use crate::webviews::{AudioWebView, VideoWebView, YouTubeWebView};
 use gpui::prelude::FluentBuilder;
 use gpui::{PathBuilder, *};
 use gpui_component::chart::{BarChart, LineChart, PieChart};

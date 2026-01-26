@@ -2,7 +2,6 @@
 
 use super::{CmdPaletteMode, CountdownState, PreviewPanel, SettingsTab, StorageLocation};
 use crate::animations::ModalAnimationState;
-use crate::audio_webview::AudioWebView;
 use crate::background::BackgroundExecutor;
 use crate::board::Board;
 use crate::board_index::BoardIndex;
@@ -14,8 +13,7 @@ use crate::perf::PerfMonitor;
 use crate::settings::Settings;
 use crate::settings_watcher::SettingsWatcher;
 use crate::types::ToolType;
-use crate::video_webview::VideoWebView;
-use crate::youtube_webview::YouTubeWebView;
+use crate::webviews::{AudioWebView, VideoWebView, YouTubeWebView};
 use gpui::*;
 use gpui_component::input::InputState;
 use gpui_component::table::TableState;
