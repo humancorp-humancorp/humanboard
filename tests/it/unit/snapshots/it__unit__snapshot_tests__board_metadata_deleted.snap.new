@@ -1,0 +1,15 @@
+---
+source: tests/it/unit/snapshot_tests.rs
+assertion_line: 497
+expression: metadata
+---
+{
+  "id": "xyz789xyz789xyz789xyz789xyz78901",
+  "name": "Archived Board",
+  "created_at": 1704067200,
+  "updated_at": 1704153600,
+  "storage_location": {
+    "type": "ICloud"
+  },
+  "deleted_at": 1704240000
+}

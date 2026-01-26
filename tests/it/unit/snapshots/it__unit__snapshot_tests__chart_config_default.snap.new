@@ -1,0 +1,16 @@
+---
+source: tests/it/unit/snapshot_tests.rs
+assertion_line: 302
+expression: config
+---
+{
+  "chart_type": "Bar",
+  "x_column": 0,
+  "y_columns": [
+    1
+  ],
+  "title": null,
+  "show_legend": true,
+  "aggregation": "Sum",
+  "sort_order": "None"
+}

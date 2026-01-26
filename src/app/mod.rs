@@ -5,8 +5,8 @@
 //! - `state` - The Humanboard struct definition
 //! - `lifecycle` - Initialization and cleanup methods
 //! - `board_management` - Board CRUD operations
-//! - `settings_methods` - Theme, font, and settings management
-//! - `command_palette_methods` - Command palette functionality
+//! - `settings_handlers` - Theme, font, and settings management
+//! - `command_palette_handlers` - Command palette functionality
 //! - `preview_core` - Core preview panel operations
 //! - `preview_webviews` - YouTube, Audio, Video webview management
 //! - `preview_tabs` - Tab close, drag, and history management
@@ -18,8 +18,8 @@ mod types;
 mod state;
 mod lifecycle;
 mod board_management;
-mod settings_methods;
-mod command_palette_methods;
+mod settings_handlers;
+mod command_palette_handlers;
 mod preview_core;
 mod preview_webviews;
 mod preview_tabs;

@@ -7,10 +7,8 @@
 //! to prevent rapid create/destroy cycles during fast panning.
 
 use super::{Humanboard, PreviewTab, SplitDirection};
-use crate::audio_webview::AudioWebView;
 use crate::constants::{HEADER_HEIGHT, WEBVIEW_PRELOAD_DISTANCE, WEBVIEW_UNLOAD_DELAY_MS, WEBVIEW_UNLOAD_DISTANCE};
-use crate::video_webview::VideoWebView;
-use crate::youtube_webview::YouTubeWebView;
+use crate::webviews::{AudioWebView, VideoWebView, YouTubeWebView};
 use gpui::*;
 use std::time::{Duration, Instant};
 use tracing::error;

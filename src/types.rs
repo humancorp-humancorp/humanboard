@@ -3,7 +3,7 @@
 //! This module defines the fundamental data structures used throughout the application,
 //! including canvas items, content types, and helper functions for content detection.
 
-use crate::pdf_thumbnail::generate_pdf_thumbnail;
+use crate::pdf::generate_pdf_thumbnail;
 use image::GenericImageView;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;

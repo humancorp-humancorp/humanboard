@@ -1,0 +1,15 @@
+---
+source: tests/it/unit/snapshot_tests.rs
+assertion_line: 704
+expression: output
+---
+text: 300x100
+video: 400x300
+audio: 320x160
+pdf: 180x240
+link: 300x150
+youtube: 560x315
+textbox: 200x100
+shape: 150x100
+table: 400x300
+chart: 400x300

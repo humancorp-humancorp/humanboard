@@ -1,0 +1,19 @@
+---
+source: tests/it/unit/snapshot_tests.rs
+assertion_line: 110
+expression: item
+---
+{
+  "id": 7,
+  "position": [
+    200.0,
+    300.0
+  ],
+  "size": [
+    560.0,
+    315.0
+  ],
+  "content": {
+    "YouTube": "dQw4w9WgXcQ"
+  }
+}

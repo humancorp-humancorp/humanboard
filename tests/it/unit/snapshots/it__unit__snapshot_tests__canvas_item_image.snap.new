@@ -1,0 +1,19 @@
+---
+source: tests/it/unit/snapshot_tests.rs
+assertion_line: 41
+expression: item
+---
+{
+  "id": 1,
+  "position": [
+    100.0,
+    200.0
+  ],
+  "size": [
+    800.0,
+    600.0
+  ],
+  "content": {
+    "Image": "/path/to/image.png"
+  }
+}

@@ -1,0 +1,50 @@
+---
+source: tests/it/unit/snapshot_tests.rs
+assertion_line: 322
+expression: source
+---
+{
+  "id": 1,
+  "name": "My Data",
+  "columns": [
+    {
+      "name": "Column A",
+      "data_type": "Text",
+      "width": null
+    },
+    {
+      "name": "Column B",
+      "data_type": "Text",
+      "width": null
+    },
+    {
+      "name": "Column C",
+      "data_type": "Text",
+      "width": null
+    }
+  ],
+  "rows": [
+    {
+      "cells": [
+        "Empty",
+        "Empty",
+        "Empty"
+      ]
+    },
+    {
+      "cells": [
+        "Empty",
+        "Empty",
+        "Empty"
+      ]
+    },
+    {
+      "cells": [
+        "Empty",
+        "Empty",
+        "Empty"
+      ]
+    }
+  ],
+  "origin": "Manual"
+}

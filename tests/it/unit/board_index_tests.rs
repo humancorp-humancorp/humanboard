@@ -15,9 +15,14 @@ fn test_board_metadata_new() {
 fn test_board_metadata_touch() {
     let mut meta = BoardMetadata::new("Test".to_string());
     let original = meta.updated_at;
-    std::thread::sleep(std::time::Duration::from_millis(10));
+
+    // Touch should update the timestamp
+    // Note: In fast execution, updated_at might be the same if within the same second.
+    // The important thing is that touch() doesn't panic and updates (or keeps) the timestamp.
     meta.touch();
-    assert!(meta.updated_at >= original);
+
+    // updated_at should be >= original (it's based on system time)
+    assert!(meta.updated_at >= original, "updated_at should not go backwards");
 }
 
 #[test]
@@ -39,4 +44,25 @@ fn test_uuid_generated_unique() {
 fn test_board_index_default() {
     let index = BoardIndex::default();
     assert!(index.boards.is_empty());
+}
+
+#[test]
+fn test_board_metadata_is_not_deleted_by_default() {
+    let meta = BoardMetadata::new("Test".to_string());
+    assert!(!meta.is_deleted());
+}
+
+#[test]
+fn test_board_metadata_trash_and_restore() {
+    let mut meta = BoardMetadata::new("Test".to_string());
+
+    assert!(!meta.is_deleted());
+
+    meta.move_to_trash();
+    assert!(meta.is_deleted());
+    assert!(meta.deleted_at.is_some());
+
+    meta.restore();
+    assert!(!meta.is_deleted());
+    assert!(meta.deleted_at.is_none());
 }

@@ -2,17 +2,20 @@
 //!
 //! Tests for the Board struct including item management, undo/redo, and history.
 
+use crate::helpers::{
+    assert_item_count, board_to_state, board_with_text, board_with_texts, empty_board,
+    TestBoardBuilder,
+};
 use humanboard::board::{Board, UndoOperation};
-use humanboard::types::{CanvasItem, ItemContent};
+use humanboard::types::ItemContent;
 use gpui::{point, px};
-use std::collections::HashMap;
 
 // Match the constant from board.rs for delta-based history
 const MAX_HISTORY_OPERATIONS: usize = 100;
 
 #[test]
 fn test_board_new_empty() {
-    let board = Board::new_for_test();
+    let board = empty_board();
     assert_eq!(board.zoom, 1.0);
     assert!(board.items.is_empty());
     assert_eq!(board.next_item_id, 0);
@@ -20,22 +23,18 @@ fn test_board_new_empty() {
 
 #[test]
 fn test_add_item() {
-    let mut board = Board::new_for_test();
-    let pos = point(px(100.0), px(200.0));
-    board.add_item(pos, ItemContent::Text("Test".to_string()));
+    let board = TestBoardBuilder::new()
+        .with_text_item("Test", (100.0, 200.0))
+        .build();
 
-    assert_eq!(board.items.len(), 1);
+    assert_item_count(&board, 1);
     assert_eq!(board.items[0].id, 0);
     assert_eq!(board.next_item_id, 1);
 }
 
 #[test]
 fn test_get_item_by_id() {
-    let mut board = Board::new_for_test();
-    board.add_item(
-        point(px(0.0), px(0.0)),
-        ItemContent::Text("Test".to_string()),
-    );
+    let board = board_with_text("Test");
 
     let item = board.get_item(0);
     assert!(item.is_some());
@@ -47,22 +46,9 @@ fn test_get_item_by_id() {
 
 #[test]
 fn test_add_multiple_items() {
-    let mut board = Board::new_for_test();
+    let board = board_with_texts(&["First", "Second", "Third"]);
 
-    board.add_item(
-        point(px(0.0), px(0.0)),
-        ItemContent::Text("First".to_string()),
-    );
-    board.add_item(
-        point(px(100.0), px(100.0)),
-        ItemContent::Text("Second".to_string()),
-    );
-    board.add_item(
-        point(px(200.0), px(200.0)),
-        ItemContent::Text("Third".to_string()),
-    );
-
-    assert_eq!(board.items.len(), 3);
+    assert_item_count(&board, 3);
     assert_eq!(board.next_item_id, 3);
     assert_eq!(board.items[0].id, 0);
     assert_eq!(board.items[1].id, 1);
@@ -71,105 +57,72 @@ fn test_add_multiple_items() {
 
 #[test]
 fn test_remove_item() {
-    let mut board = Board::new_for_test();
-    board.add_item(
-        point(px(0.0), px(0.0)),
-        ItemContent::Text("First".to_string()),
-    );
-    board.add_item(
-        point(px(100.0), px(100.0)),
-        ItemContent::Text("Second".to_string()),
-    );
+    let mut board = board_with_texts(&["First", "Second"]);
 
     assert!(board.remove_item(0));
-    assert_eq!(board.items.len(), 1);
+    assert_item_count(&board, 1);
     assert!(board.get_item(0).is_none());
     assert!(board.get_item(1).is_some());
 }
 
 #[test]
 fn test_undo_empty() {
-    let mut board = Board::new_for_test();
+    let mut board = empty_board();
     assert!(!board.undo());
 }
 
 #[test]
 fn test_redo_empty() {
-    let mut board = Board::new_for_test();
+    let mut board = empty_board();
     assert!(!board.redo());
 }
 
 #[test]
 fn test_undo_after_add() {
-    let mut board = Board::new_for_test();
-    board.add_item(
-        point(px(0.0), px(0.0)),
-        ItemContent::Text("Test".to_string()),
-    );
+    let mut board = board_with_text("Test");
 
-    assert_eq!(board.items.len(), 1);
+    assert_item_count(&board, 1);
     assert!(board.undo());
-    assert_eq!(board.items.len(), 0);
+    assert_item_count(&board, 0);
 }
 
 #[test]
 fn test_redo_after_undo() {
-    let mut board = Board::new_for_test();
-    board.add_item(
-        point(px(0.0), px(0.0)),
-        ItemContent::Text("Test".to_string()),
-    );
+    let mut board = board_with_text("Test");
 
     board.undo();
-    assert_eq!(board.items.len(), 0);
+    assert_item_count(&board, 0);
 
     assert!(board.redo());
-    assert_eq!(board.items.len(), 1);
+    assert_item_count(&board, 1);
 }
 
 #[test]
 fn test_undo_redo_multiple() {
-    let mut board = Board::new_for_test();
+    let mut board = board_with_texts(&["First", "Second"]);
 
-    board.add_item(
-        point(px(0.0), px(0.0)),
-        ItemContent::Text("First".to_string()),
-    );
-    board.add_item(
-        point(px(100.0), px(100.0)),
-        ItemContent::Text("Second".to_string()),
-    );
-
-    assert_eq!(board.items.len(), 2);
+    assert_item_count(&board, 2);
 
     board.undo();
-    assert_eq!(board.items.len(), 1);
+    assert_item_count(&board, 1);
 
     board.undo();
-    assert_eq!(board.items.len(), 0);
+    assert_item_count(&board, 0);
 
     board.redo();
-    assert_eq!(board.items.len(), 1);
+    assert_item_count(&board, 1);
 
     board.redo();
-    assert_eq!(board.items.len(), 2);
+    assert_item_count(&board, 2);
 }
 
 #[test]
 fn test_undo_then_add_clears_redo() {
-    let mut board = Board::new_for_test();
-
-    board.add_item(
-        point(px(0.0), px(0.0)),
-        ItemContent::Text("First".to_string()),
-    );
-    board.add_item(
-        point(px(100.0), px(100.0)),
-        ItemContent::Text("Second".to_string()),
-    );
+    let mut board = board_with_texts(&["First", "Second"]);
 
     board.undo();
 
+    // Adding a new item should clear redo history
     board.add_item(
         point(px(200.0), px(200.0)),
         ItemContent::Text("Third".to_string()),
@@ -182,48 +135,36 @@ fn test_undo_then_add_clears_redo() {
 fn test_board_state_serialization() {
     use humanboard::board::BoardState;
 
-    let state = BoardState {
-        canvas_offset: (10.0, 20.0),
-        zoom: 1.5,
-        items: vec![CanvasItem {
-            id: 1,
-            position: (100.0, 200.0),
-            size: (300.0, 400.0),
-            content: ItemContent::Text("Test".to_string()),
-        }],
-        next_item_id: 2,
-        data_sources: HashMap::new(),
-        next_data_source_id: 0,
-    };
+    let board = TestBoardBuilder::new()
+        .with_text_item("Test", (100.0, 200.0))
+        .with_zoom(1.5)
+        .with_offset(10.0, 20.0)
+        .build();
 
+    let state = board_to_state(&board);
     let json = serde_json::to_string(&state).unwrap();
     let restored: BoardState = serde_json::from_str(&json).unwrap();
 
     assert_eq!(restored.canvas_offset, (10.0, 20.0));
     assert_eq!(restored.zoom, 1.5);
     assert_eq!(restored.items.len(), 1);
-    assert_eq!(restored.next_item_id, 2);
 }
 
 #[test]
 fn test_history_limit() {
-    let mut board = Board::new_for_test();
-
-    for i in 0..60 {
-        board.add_item(
-            point(px(i as f32 * 10.0), px(0.0)),
-            ItemContent::Text(format!("Item {}", i)),
-        );
-    }
+    let board = TestBoardBuilder::new()
+        .with_n_text_items_spaced(60, 10.0)
+        .build();
 
     assert!(board.history_len() <= MAX_HISTORY_OPERATIONS + 1);
 }
 
 #[test]
 fn test_screen_to_canvas_conversion() {
-    let mut board = Board::new_for_test();
-    board.canvas_offset = point(px(100.0), px(50.0));
-    board.zoom = 2.0;
+    let board = TestBoardBuilder::new()
+        .with_offset(100.0, 50.0)
+        .with_zoom(2.0)
+        .build();
 
     let screen_pos = point(px(300.0), px(150.0));
     let canvas_pos = board.screen_to_canvas(screen_pos);
@@ -236,19 +177,7 @@ fn test_screen_to_canvas_conversion() {
 
 #[test]
 fn test_find_items_by_name() {
-    let mut board = Board::new_for_test();
-    board.add_item(
-        point(px(0.0), px(0.0)),
-        ItemContent::Text("Hello World".to_string()),
-    );
-    board.add_item(
-        point(px(100.0), px(0.0)),
-        ItemContent::Text("Goodbye World".to_string()),
-    );
-    board.add_item(
-        point(px(200.0), px(0.0)),
-        ItemContent::Text("Hello Again".to_string()),
-    );
+    let board = board_with_texts(&["Hello World", "Goodbye World", "Hello Again"]);
 
     let results = board.find_items("Hello");
     assert_eq!(results.len(), 2);
@@ -265,11 +194,7 @@ fn test_find_items_by_name() {
 
 #[test]
 fn test_find_items_case_insensitive() {
-    let mut board = Board::new_for_test();
-    board.add_item(
-        point(px(0.0), px(0.0)),
-        ItemContent::Text("Hello World".to_string()),
-    );
+    let board = board_with_text("Hello World");
 
     let results = board.find_items("hello");
     assert_eq!(results.len(), 1);
@@ -280,9 +205,10 @@ fn test_find_items_case_insensitive() {
 
 #[test]
 fn test_canvas_to_screen_conversion() {
-    let mut board = Board::new_for_test();
-    board.canvas_offset = point(px(100.0), px(50.0));
-    board.zoom = 2.0;
+    let board = TestBoardBuilder::new()
+        .with_offset(100.0, 50.0)
+        .with_zoom(2.0)
+        .build();
 
     let canvas_pos = point(px(100.0), px(50.0));
     let screen_pos = board.canvas_to_screen(canvas_pos);

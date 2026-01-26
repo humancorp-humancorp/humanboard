@@ -1,0 +1,23 @@
+---
+source: tests/it/unit/snapshot_tests.rs
+assertion_line: 125
+expression: item
+---
+{
+  "id": 8,
+  "position": [
+    400.0,
+    100.0
+  ],
+  "size": [
+    200.0,
+    36.0
+  ],
+  "content": {
+    "Markdown": {
+      "path": "/docs/README.md",
+      "title": "README",
+      "content": "# Hello\n\nThis is a test document."
+    }
+  }
+}

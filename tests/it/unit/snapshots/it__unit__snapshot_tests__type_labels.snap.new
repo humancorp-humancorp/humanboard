@@ -1,0 +1,15 @@
+---
+source: tests/it/unit/snapshot_tests.rs
+assertion_line: 603
+expression: output
+---
+image: IMAGE
+video: VIDEO
+audio: AUDIO
+pdf: PDF
+text: TEXT
+link: LINK
+youtube: YOUTUBE
+markdown: MARKDOWN
+code_rust: RUST
+code_python: PYTHON

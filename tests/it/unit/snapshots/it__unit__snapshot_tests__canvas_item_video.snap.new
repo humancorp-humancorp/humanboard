@@ -1,0 +1,19 @@
+---
+source: tests/it/unit/snapshot_tests.rs
+assertion_line: 52
+expression: item
+---
+{
+  "id": 2,
+  "position": [
+    50.0,
+    100.0
+  ],
+  "size": [
+    400.0,
+    300.0
+  ],
+  "content": {
+    "Video": "/path/to/video.mp4"
+  }
+}

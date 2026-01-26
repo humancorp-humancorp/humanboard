@@ -1,0 +1,19 @@
+---
+source: tests/it/unit/snapshot_tests.rs
+assertion_line: 63
+expression: item
+---
+{
+  "id": 3,
+  "position": [
+    0.0,
+    0.0
+  ],
+  "size": [
+    320.0,
+    160.0
+  ],
+  "content": {
+    "Audio": "/music/song.mp3"
+  }
+}

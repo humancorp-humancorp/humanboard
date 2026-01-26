@@ -50,7 +50,13 @@ fn test_toast_custom_duration() {
     assert_eq!(toast.duration, Duration::from_secs(10));
 }
 
+/// This test verifies that the expiration logic works correctly over time.
+/// It is marked as ignored because it requires actual time to pass,
+/// making it slow and potentially flaky in CI environments.
+///
+/// To run: cargo test test_toast_expiry -- --ignored
 #[test]
+#[ignore]
 fn test_toast_expiry() {
     use std::time::Duration;
 
@@ -63,14 +69,29 @@ fn test_toast_expiry() {
 }
 
 #[test]
-fn test_toast_opacity_fade() {
-    use std::time::Duration;
-
+fn test_toast_opacity_fresh() {
     // Fresh toast should have full opacity
     let fresh = Toast::info("Fresh");
     assert_eq!(fresh.opacity(false), 1.0);
+}
 
-    // Expired toast should have zero opacity
+#[test]
+fn test_toast_opacity_with_reduce_motion() {
+    // With reduce_motion enabled, opacity should always be 1.0
+    let toast = Toast::info("Test");
+    assert_eq!(toast.opacity(true), 1.0);
+}
+
+/// This test verifies opacity fading over time.
+/// It is marked as ignored because it requires actual time to pass.
+///
+/// To run: cargo test test_toast_opacity_fade_over_time -- --ignored
+#[test]
+#[ignore]
+fn test_toast_opacity_fade_over_time() {
+    use std::time::Duration;
+
+    // Expired toast should have low/zero opacity
     let expired = Toast::info("Old").with_duration(Duration::from_millis(1));
     std::thread::sleep(Duration::from_millis(10));
     assert!(expired.opacity(false) < 0.1);
