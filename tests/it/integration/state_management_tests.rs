@@ -139,10 +139,12 @@ fn test_board_metadata_touch() {
     let mut meta = BoardMetadata::new("Test".to_string());
     let original_updated = meta.updated_at;
 
-    std::thread::sleep(std::time::Duration::from_millis(10));
+    // Touch should update the timestamp
+    // Note: In fast execution, updated_at might be the same if within the same second.
+    // The important thing is that touch() doesn't panic and updates (or keeps) the timestamp.
     meta.touch();
 
-    assert!(meta.updated_at >= original_updated);
+    assert!(meta.updated_at >= original_updated, "updated_at should not go backwards");
 }
 
 #[test]

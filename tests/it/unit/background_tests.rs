@@ -3,8 +3,28 @@
 use humanboard::background::{BackgroundExecutor, TaskResult};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
+
+/// Helper to poll for task completion with a timeout.
+/// This is much faster than sleeping because it checks frequently
+/// and returns as soon as the condition is met.
+fn wait_for_completion<F>(executor: &BackgroundExecutor, mut condition: F, timeout: Duration) -> bool
+where
+    F: FnMut() -> bool,
+{
+    let start = Instant::now();
+    while start.elapsed() < timeout {
+        executor.process_results();
+        if condition() {
+            return true;
+        }
+        // Yield to allow background thread to run
+        std::thread::yield_now();
+    }
+    // One final process_results call
+    executor.process_results();
+    condition()
+}
 
 #[test]
 fn test_executor_creation() {
@@ -28,12 +48,14 @@ fn test_spawn_and_complete() {
         },
     );
 
-    // Wait a bit for task to complete
-    thread::sleep(Duration::from_millis(100));
+    // Poll until completed or timeout (should be nearly instant)
+    let success = wait_for_completion(
+        &executor,
+        || completed.load(Ordering::SeqCst),
+        Duration::from_secs(1),
+    );
 
-    // Process results
-    let processed = executor.process_results();
-    assert_eq!(processed, 1);
+    assert!(success, "Task should have completed");
     assert!(completed.load(Ordering::SeqCst));
 }
 
@@ -52,8 +74,14 @@ fn test_error_handling() {
         },
     );
 
-    thread::sleep(Duration::from_millis(100));
-    executor.process_results();
+    // Poll until completed or timeout
+    let success = wait_for_completion(
+        &executor,
+        || got_error.load(Ordering::SeqCst),
+        Duration::from_secs(1),
+    );
+
+    assert!(success, "Error callback should have been called");
     assert!(got_error.load(Ordering::SeqCst));
 }
 
@@ -75,9 +103,13 @@ fn test_multiple_tasks() {
         );
     }
 
-    // Wait for all tasks
-    thread::sleep(Duration::from_millis(200));
-    executor.process_results();
+    // Poll until all tasks complete or timeout
+    let success = wait_for_completion(
+        &executor,
+        || *counter.lock().unwrap() == 5,
+        Duration::from_secs(2),
+    );
 
+    assert!(success, "All 5 tasks should have completed");
     assert_eq!(*counter.lock().unwrap(), 5);
 }
