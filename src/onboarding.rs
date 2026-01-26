@@ -11,7 +11,6 @@ pub fn render_onboarding_page(cx: &mut Context<Humanboard>) -> Div {
     let bg = cx.theme().background;
     let fg = cx.theme().foreground;
     let muted = cx.theme().muted_foreground;
-    let accent = cx.theme().accent;
 
     div()
         .size_full()
@@ -28,22 +27,6 @@ pub fn render_onboarding_page(cx: &mut Context<Humanboard>) -> Div {
                 .gap_6()
                 .max_w(px(480.0))
                 .p_8()
-                .child(
-                    // Logo/icon placeholder
-                    div()
-                        .size(px(80.0))
-                        .rounded(px(16.0))
-                        .bg(accent.opacity(0.1))
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .child(
-                            div()
-                                .text_size(px(40.0))
-                                .text_color(accent)
-                                .child("H"),
-                        ),
-                )
                 .child(
                     // Welcome title
                     div()
