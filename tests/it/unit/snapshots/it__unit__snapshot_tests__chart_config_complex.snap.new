@@ -1,0 +1,18 @@
+---
+source: tests/it/unit/snapshot_tests.rs
+assertion_line: 312
+expression: config
+---
+{
+  "chart_type": "Line",
+  "x_column": 0,
+  "y_columns": [
+    1,
+    2,
+    3
+  ],
+  "title": "Revenue Trends",
+  "show_legend": true,
+  "aggregation": "Average",
+  "sort_order": "LabelAsc"
+}

@@ -1,0 +1,19 @@
+---
+source: tests/it/unit/snapshot_tests.rs
+assertion_line: 88
+expression: item
+---
+{
+  "id": 5,
+  "position": [
+    10.0,
+    20.0
+  ],
+  "size": [
+    300.0,
+    100.0
+  ],
+  "content": {
+    "Text": "Hello, Humanboard!"
+  }
+}

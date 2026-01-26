@@ -30,7 +30,7 @@ lofty = "0.18"
 
 # Error handling and logging (Zed patterns)
 anyhow = "1.0"
-thiserror = "1.0"
+thiserror = "2.0"  # Consolidated: gpui, polars, naga all use 2.x
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
@@ -44,7 +44,7 @@ parking_lot = "0.12"
 rstar = "0.12"
 
 # File watching for settings hot-reload
-notify = "6.1"
+notify = "7.0"  # Consolidated: gpui-component uses 7.0
 
 # Secure temp file handling
 tempfile = "3.10"
@@ -60,7 +60,7 @@ polars = { version = "0.46", default-features = false, features = [
 ] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-core-text = "20.1"
+core-text = "21.0"  # Consolidated: gpui uses 21.0
 
 # =============================================================================
 # FEATURES
@@ -135,6 +135,9 @@ panic = "abort"
 [[test]]
 name = "it"
 path = "tests/it/main.rs"
+
+[dev-dependencies]
+insta = { version = "1.34", features = ["json", "redactions"] }
 
 [package.metadata.bundle]
 name = "Humanboard"

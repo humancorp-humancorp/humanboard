@@ -1,0 +1,60 @@
+---
+source: tests/it/unit/snapshot_tests.rs
+assertion_line: 353
+expression: source
+---
+{
+  "id": 42,
+  "name": "Sales Report",
+  "columns": [
+    {
+      "name": "Region",
+      "data_type": "Text",
+      "width": null
+    },
+    {
+      "name": "Q1 Sales",
+      "data_type": "Number",
+      "width": null
+    },
+    {
+      "name": "Q2 Sales",
+      "data_type": "Number",
+      "width": null
+    }
+  ],
+  "rows": [
+    {
+      "cells": [
+        {
+          "Text": "North"
+        },
+        {
+          "Number": 15000.0
+        },
+        {
+          "Number": 18500.0
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "Text": "South"
+        },
+        {
+          "Number": 12000.0
+        },
+        {
+          "Number": 14200.0
+        }
+      ]
+    }
+  ],
+  "origin": {
+    "File": {
+      "path": "/data/sales.csv",
+      "delimiter": ","
+    }
+  }
+}

@@ -1,0 +1,23 @@
+---
+source: tests/it/unit/snapshot_tests.rs
+assertion_line: 154
+expression: item
+---
+{
+  "id": 10,
+  "position": [
+    100.0,
+    100.0
+  ],
+  "size": [
+    200.0,
+    100.0
+  ],
+  "content": {
+    "TextBox": {
+      "text": "Editable text content",
+      "font_size": 16.0,
+      "color": "#ffffff"
+    }
+  }
+}

@@ -1,0 +1,22 @@
+---
+source: tests/it/unit/snapshot_tests.rs
+assertion_line: 77
+expression: item
+---
+{
+  "id": 4,
+  "position": [
+    300.0,
+    400.0
+  ],
+  "size": [
+    180.0,
+    240.0
+  ],
+  "content": {
+    "Pdf": {
+      "path": "/documents/report.pdf",
+      "thumbnail": "/cache/report_thumb.png"
+    }
+  }
+}

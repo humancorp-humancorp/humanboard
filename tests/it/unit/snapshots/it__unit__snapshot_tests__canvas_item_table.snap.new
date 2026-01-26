@@ -1,0 +1,23 @@
+---
+source: tests/it/unit/snapshot_tests.rs
+assertion_line: 217
+expression: item
+---
+{
+  "id": 14,
+  "position": [
+    0.0,
+    500.0
+  ],
+  "size": [
+    400.0,
+    300.0
+  ],
+  "content": {
+    "Table": {
+      "data_source_id": 100,
+      "show_headers": true,
+      "stripe": true
+    }
+  }
+}

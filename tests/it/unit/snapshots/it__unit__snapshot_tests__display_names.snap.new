@@ -1,0 +1,10 @@
+---
+source: tests/it/unit/snapshot_tests.rs
+assertion_line: 637
+expression: output
+---
+image: vacation.jpg
+video: demo.mp4
+text: Hello World
+link: https://example.com/page
+youtube: YouTube: abc123

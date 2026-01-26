@@ -1,0 +1,19 @@
+---
+source: tests/it/unit/snapshot_tests.rs
+assertion_line: 99
+expression: item
+---
+{
+  "id": 6,
+  "position": [
+    150.0,
+    250.0
+  ],
+  "size": [
+    300.0,
+    150.0
+  ],
+  "content": {
+    "Link": "https://github.com/humanboard-org"
+  }
+}

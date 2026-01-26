@@ -1,0 +1,15 @@
+---
+source: tests/it/unit/snapshot_tests.rs
+assertion_line: 445
+expression: content
+---
+{
+  "theme": "Catppuccin Mocha",
+  "font": "JetBrainsMono Nerd Font",
+  "font_size": 14.0,
+  "grid_size": 25.0,
+  "show_grid": true,
+  "zoom_sensitivity": 1.5,
+  "onboarding_completed": true,
+  "reduce_motion": "off"
+}

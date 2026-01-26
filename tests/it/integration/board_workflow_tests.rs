@@ -1,5 +1,6 @@
 //! Board Workflow Integration Tests
 
+use crate::helpers::{assert_item_count, board_to_state, empty_board, TestBoardBuilder};
 use humanboard::board::{Board, BoardState};
 use humanboard::board_index::{BoardIndex, BoardMetadata};
 use humanboard::types::{CanvasItem, ItemContent};
@@ -7,7 +8,7 @@ use gpui::{point, px};
 
 #[test]
 fn test_new_board_workflow() {
-    let board = Board::new_for_test();
+    let board = empty_board();
     assert!(board.items.is_empty());
     assert_eq!(board.zoom, 1.0);
     assert_eq!(board.next_item_id, 0);
@@ -15,46 +16,26 @@ fn test_new_board_workflow() {
 
 #[test]
 fn test_board_with_items_workflow() {
-    let mut board = Board::new_for_test();
+    let board = TestBoardBuilder::new()
+        .with_text_item("Note 1", (100.0, 100.0))
+        .with_text_item("Note 2", (300.0, 100.0))
+        .with_markdown_item("/test/readme.md", "README", "# Test", (100.0, 300.0))
+        .build();
 
-    board.add_item(point(px(100.0), px(100.0)), ItemContent::Text("Note 1".to_string()));
-    board.add_item(point(px(300.0), px(100.0)), ItemContent::Text("Note 2".to_string()));
-    board.add_item(point(px(100.0), px(300.0)), ItemContent::Markdown {
-        path: "/test/readme.md".into(),
-        title: "README".to_string(),
-        content: "# Test".to_string(),
-    });
-
-    assert_eq!(board.items.len(), 3);
+    assert_item_count(&board, 3);
     assert_eq!(board.next_item_id, 3);
 }
 
 #[test]
 fn test_board_state_round_trip() {
-    let mut board = Board::new_for_test();
-    board.canvas_offset = point(px(50.0), px(75.0));
-    board.zoom = 1.5;
+    let board = TestBoardBuilder::new()
+        .with_offset(50.0, 75.0)
+        .with_zoom(1.5)
+        .with_text_item("Test Item", (100.0, 200.0))
+        .with_code_item("/test/main.rs", "rust", (400.0, 300.0))
+        .build();
 
-    board.add_item(point(px(100.0), px(200.0)), ItemContent::Text("Test Item".to_string()));
-    board.add_item(point(px(400.0), px(300.0)), ItemContent::Code {
-        path: "/test/main.rs".into(),
-        language: "rust".to_string(),
-    });
-
-    let state = BoardState {
-        canvas_offset: (f32::from(board.canvas_offset.x), f32::from(board.canvas_offset.y)),
-        zoom: board.zoom,
-        items: board.items.iter().map(|item| CanvasItem {
-            id: item.id,
-            position: item.position,
-            size: item.size,
-            content: item.content.clone(),
-        }).collect(),
-        next_item_id: board.next_item_id,
-        data_sources: board.data_sources.clone(),
-        next_data_source_id: board.next_data_source_id,
-    };
-
+    let state = board_to_state(&board);
     let json = serde_json::to_string_pretty(&state).unwrap();
     let restored: BoardState = serde_json::from_str(&json).unwrap();
 
@@ -116,15 +97,16 @@ fn test_zoom_workflow() {
 
 #[test]
 fn test_search_workflow() {
-    let mut board = Board::new_for_test();
-
-    board.add_item(point(px(0.0), px(0.0)), ItemContent::Text("Meeting Notes".to_string()));
-    board.add_item(point(px(100.0), px(0.0)), ItemContent::Text("Project Plan".to_string()));
-    board.add_item(point(px(200.0), px(0.0)), ItemContent::Markdown {
-        path: "/notes.md".into(),
-        title: "Meeting Summary".to_string(),
-        content: "# Meeting Summary\nDiscussed project timeline.".to_string(),
-    });
+    let board = TestBoardBuilder::new()
+        .with_text_item("Meeting Notes", (0.0, 0.0))
+        .with_text_item("Project Plan", (100.0, 0.0))
+        .with_markdown_item(
+            "/notes.md",
+            "Meeting Summary",
+            "# Meeting Summary\nDiscussed project timeline.",
+            (200.0, 0.0),
+        )
+        .build();
 
     let results = board.find_items("meeting");
     assert_eq!(results.len(), 2);
@@ -165,30 +147,20 @@ fn test_complete_board_lifecycle() {
 
 #[test]
 fn test_board_with_mixed_content_types() {
-    let mut board = Board::new_for_test();
+    let board = TestBoardBuilder::new()
+        .with_text_item("Plain text", (0.0, 0.0))
+        .with_image_item("/path/to/image.png", (200.0, 0.0))
+        .with_pdf_item("/path/to/doc.pdf", (400.0, 0.0))
+        .with_video_item("/path/to/video.mp4", (0.0, 200.0))
+        .with_audio_item("/path/to/audio.mp3", (200.0, 200.0))
+        .with_youtube_item("abc123", (400.0, 200.0))
+        .with_markdown_item("/notes.md", "Notes", "# Notes", (0.0, 400.0))
+        .with_code_item("/main.rs", "rust", (200.0, 400.0))
+        .build();
 
-    board.add_item(point(px(0.0), px(0.0)), ItemContent::Text("Plain text".to_string()));
-    board.add_item(point(px(200.0), px(0.0)), ItemContent::Image("/path/to/image.png".into()));
-    board.add_item(point(px(400.0), px(0.0)), ItemContent::Pdf { path: "/path/to/doc.pdf".into(), thumbnail: None });
-    board.add_item(point(px(0.0), px(200.0)), ItemContent::Video("/path/to/video.mp4".into()));
-    board.add_item(point(px(200.0), px(200.0)), ItemContent::Audio("/path/to/audio.mp3".into()));
-    board.add_item(point(px(400.0), px(200.0)), ItemContent::YouTube("abc123".to_string()));
-    board.add_item(point(px(0.0), px(400.0)), ItemContent::Markdown { path: "/notes.md".into(), title: "Notes".to_string(), content: "# Notes".to_string() });
-    board.add_item(point(px(200.0), px(400.0)), ItemContent::Code { path: "/main.rs".into(), language: "rust".to_string() });
+    assert_item_count(&board, 8);
 
-    assert_eq!(board.items.len(), 8);
-
-    let state = BoardState {
-        canvas_offset: (0.0, 0.0),
-        zoom: 1.0,
-        items: board.items.iter().map(|item| CanvasItem {
-            id: item.id, position: item.position, size: item.size, content: item.content.clone(),
-        }).collect(),
-        next_item_id: board.next_item_id,
-        data_sources: board.data_sources.clone(),
-        next_data_source_id: board.next_data_source_id,
-    };
-
+    let state = board_to_state(&board);
     let json = serde_json::to_string(&state).unwrap();
     let restored: BoardState = serde_json::from_str(&json).unwrap();
 

@@ -1,0 +1,15 @@
+---
+source: tests/it/unit/snapshot_tests.rs
+assertion_line: 484
+expression: metadata
+---
+{
+  "id": "abc123def456abc123def456abc12345",
+  "name": "My Moodboard",
+  "created_at": 1704067200,
+  "updated_at": 1704153600,
+  "storage_location": {
+    "type": "Default"
+  },
+  "deleted_at": null
+}
