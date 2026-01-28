@@ -258,7 +258,7 @@ pub enum DataOrigin {
 // ============================================================================
 
 /// Chart configuration
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Hash, Serialize, Deserialize)]
 pub struct ChartConfig {
     /// Type of chart to render
     pub chart_type: ChartType,
@@ -321,7 +321,7 @@ impl ChartConfig {
 }
 
 /// Types of charts available
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ChartType {
     Line,
     #[default]
@@ -354,7 +354,7 @@ impl ChartType {
 }
 
 /// Aggregation method for grouping duplicate X values
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AggregationType {
     /// No aggregation - show raw values (may have duplicates)
     None,
@@ -396,7 +396,7 @@ impl AggregationType {
 }
 
 /// Sort order for chart data
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SortOrder {
     /// No sorting - keep original order
     #[default]
@@ -478,6 +478,42 @@ pub enum ArrowHead {
     Arrow,
     Diamond,
     Circle,
+}
+
+/// Arrow direction based on end offset quadrant
+/// Used for encoding/decoding arrow geometry without string matching
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ArrowDirection {
+    /// Up-Right quadrant (+, +)
+    UpRight,
+    /// Up-Left quadrant (-, +)
+    UpLeft,
+    /// Down-Right quadrant (+, -)
+    DownRight,
+    /// Down-Left quadrant (-, -)
+    DownLeft,
+}
+
+impl ArrowDirection {
+    /// Create an ArrowDirection from an offset tuple
+    pub fn from_offset(offset: (f32, f32)) -> Self {
+        match (offset.0 >= 0.0, offset.1 >= 0.0) {
+            (true, true) => Self::UpRight,
+            (false, true) => Self::UpLeft,
+            (true, false) => Self::DownRight,
+            (false, false) => Self::DownLeft,
+        }
+    }
+
+    /// Get the sign multipliers for this direction
+    pub fn to_signs(self) -> (f32, f32) {
+        match self {
+            Self::UpRight => (1.0, 1.0),
+            Self::UpLeft => (-1.0, 1.0),
+            Self::DownRight => (1.0, -1.0),
+            Self::DownLeft => (-1.0, -1.0),
+        }
+    }
 }
 
 /// The content type of a canvas item.
@@ -703,7 +739,7 @@ impl ItemContent {
                 (w, h)
             }
             ItemContent::Shape { .. } => (150.0, 100.0), // Default shape size
-            ItemContent::Table { .. } => (400.0, 300.0), // Default table size
+            ItemContent::Table { .. } => (200.0, 36.0),  // Compact file card like code files
             ItemContent::Chart { .. } => (400.0, 300.0), // Default chart size
         }
     }

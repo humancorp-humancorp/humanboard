@@ -1,4 +1,4 @@
-//! Application state - the Humanboard struct definition.
+//! Application state - the Humanboard struct definition and sub-structs.
 
 use super::{CmdPaletteMode, CountdownState, PreviewPanel, SettingsTab, StorageLocation};
 use crate::animations::ModalAnimationState;
@@ -15,6 +15,7 @@ use crate::settings_watcher::SettingsWatcher;
 use crate::types::ToolType;
 use crate::webviews::{AudioWebView, VideoWebView, YouTubeWebView};
 use gpui::*;
+use crate::input::InputState as CanvasInputState;
 use gpui_component::input::InputState;
 use gpui_component::table::TableState;
 use std::collections::{HashMap, HashSet};
@@ -60,144 +61,218 @@ impl ChartConfigModal {
     }
 }
 
-pub struct Humanboard {
-    // View state
+// =============================================================================
+// Sub-structs extracted from the god object Humanboard
+// =============================================================================
+
+/// Navigation and view state - landing page, board index, current view
+pub struct NavigationState {
+    /// Current view (Onboarding, Home, Landing, Board)
     pub view: super::AppView,
+    /// Index of all boards
     pub board_index: BoardIndex,
-
-    // Landing page state
+    /// Board ID being edited (rename)
     pub editing_board_id: Option<String>,
+    /// Input field for board name editing
     pub edit_input: Option<Entity<InputState>>,
+    /// Board ID being deleted
     pub deleting_board_id: Option<String>,
-
-    // Board creation modal state
+    /// Show create board modal
     pub show_create_board_modal: bool,
+    /// Input field for new board name
     pub create_board_input: Option<Entity<InputState>>,
+    /// Storage location for new board
     pub create_board_location: StorageLocation,
+    /// Backdrop clicked flag for modal
     pub create_board_backdrop_clicked: bool,
-
-    // Trash visibility on landing page
+    /// Show trash section on landing page
     pub show_trash: bool,
-
-    // Board state (only populated when view is Board)
-    pub board: Option<Board>,
-    pub dragging: bool,
-    pub last_mouse_pos: Option<Point<Pixels>>,
-    pub dragging_item: Option<u64>,
-    pub item_drag_offset: Option<Point<Pixels>>,
-    pub resizing_item: Option<u64>,
-    pub resize_start_size: Option<(f32, f32)>,
-    pub resize_start_pos: Option<Point<Pixels>>,
-    pub resize_start_font_size: Option<f32>,
-    pub selected_items: HashSet<u64>,
-
-    // Marquee selection state
-    pub marquee_start: Option<Point<Pixels>>,
-    pub marquee_current: Option<Point<Pixels>>,
-
-    pub frame_times: Vec<Duration>,
-    pub last_frame: Instant,
-    pub frame_count: u64,
-    /// Focus manager for handling focus across different contexts
-    pub focus: FocusManager,
-    pub preview: Option<PreviewPanel>,
-    pub dragging_tab: Option<usize>,    // Index of tab being dragged (only set after threshold)
-    pub tab_drag_target: Option<usize>, // Target position for tab drop
-    pub tab_drag_split_zone: Option<super::SplitDropZone>, // Drop zone for creating split
-    pub tab_drag_position: Option<Point<Pixels>>, // Current drag position for ghost
-    pub tab_drag_pending: Option<(usize, Point<Pixels>, bool)>, // (tab_index, start_pos, is_left_pane) - pending drag before threshold
-    pub preview_search: Option<Entity<InputState>>, // Search input for preview panel
-    pub preview_search_query: String,   // Current search query
-    pub preview_search_matches: Vec<(usize, usize)>, // (line, column) positions of matches
-    pub preview_search_current: usize,  // Current match index
-    pub dragging_splitter: bool,
-    pub splitter_drag_start: Option<Point<Pixels>>,
-    pub dragging_pane_splitter: bool, // Dragging the splitter between split panes
-    pub last_drop_pos: Option<Point<Pixels>>,
-    pub file_drop_rx: Option<Receiver<(Point<Pixels>, Vec<PathBuf>)>>,
-
-    // UI overlays
-    pub show_shortcuts: bool,
-    pub command_palette: Option<Entity<InputState>>, // Command palette input
-    pub pending_command: Option<String>, // Command to execute (deferred until we have window access)
-    pub search_results: Vec<(u64, String)>, // Search results: (item_id, display_name)
-    pub selected_result: usize,          // Currently selected search result index
-    pub cmd_palette_mode: CmdPaletteMode, // Current mode: items or themes
-
-    // YouTube WebViews (keyed by item ID)
-    pub youtube_webviews: HashMap<u64, YouTubeWebView>,
-
-    // Audio WebViews (keyed by item ID)
-    pub audio_webviews: HashMap<u64, AudioWebView>,
-
-    // Video WebViews (keyed by item ID)
-    pub video_webviews: HashMap<u64, VideoWebView>,
-
-    // Webview lifecycle tracking - when items went out of viewport (for delayed unload)
-    pub webview_out_of_range_since: HashMap<u64, std::time::Instant>,
-
-    // Settings
-    pub settings: Settings,
-    pub show_settings: bool,
-    pub settings_backdrop_clicked: bool,
-    pub settings_tab: SettingsTab,
-    pub settings_theme_index: usize,
-    pub settings_theme_scroll: ScrollHandle,
-    pub settings_font_index: usize,
-    pub settings_font_scroll: ScrollHandle,
-
-    // Modal focus trap state
-    pub modal_focus_index: usize, // Current focus index within modal (for Tab cycling)
-
-    // Toast notifications
-    pub toast_manager: ToastManager,
-
-    // Preview tab scroll handles (left/right for split pane)
-    pub preview_tab_scroll: ScrollHandle,
-    pub preview_right_tab_scroll: ScrollHandle,
-
-    // Command palette scroll handle
-    pub cmd_palette_scroll: ScrollHandle,
-
-    // Pan animation state
-    pub pan_animation: Option<PanAnimation>,
-
-    // Modal animation state
-    pub modal_animations: ModalAnimationState,
-
-    // Tool dock state
-    pub selected_tool: ToolType,
-    pub drawing_start: Option<Point<Pixels>>, // Start position for drawing shapes/arrows
-    pub drawing_current: Option<Point<Pixels>>, // Current position while drawing (for preview)
-    pub editing_textbox_id: Option<u64>,      // ID of textbox being edited
-    pub textbox_input: Option<Entity<gpui_component::input::InputState>>, // Input for editing textbox
-    pub pending_textbox_drag: Option<(u64, Point<Pixels>)>, // Deferred drag for textboxes (to allow double-click)
-
-    // Table cell editing
-    pub editing_table_cell: Option<(u64, usize, usize)>, // (table_item_id, row, col)
-    pub table_cell_input: Option<Entity<gpui_component::input::InputState>>,
-
-    // Table virtual scrolling (keyed by table item ID)
-    pub table_scroll_states: HashMap<u64, VirtualScrollState>,
-
-    // gpui-component Table states (keyed by table item ID)
-    pub table_states: HashMap<u64, Entity<TableState<DataSourceDelegate>>>,
-
-    // Chart configuration modal state
-    pub chart_config_modal: Option<ChartConfigModal>,
-
-    // Hit testing
-    pub hit_tester: HitTester,
-
-    // Performance monitoring
-    pub perf_monitor: PerfMonitor,
-
-    // Background task executor
-    pub background: BackgroundExecutor,
-
-    // Settings file watcher for hot-reload
-    pub settings_watcher: Option<SettingsWatcher>,
-
-    // Home screen countdown state
+    /// Countdown state for home screen
     pub countdown: Option<CountdownState>,
+}
+
+/// Canvas interaction state - dragging, selection, zoom, etc.
+pub struct CanvasState {
+    /// Board data (only populated when view is Board)
+    pub board: Option<Board>,
+    /// Set of selected item IDs
+    pub selected_items: HashSet<u64>,
+    /// Input state machine - replaces scattered boolean flags
+    pub input_state: CanvasInputState,
+    /// File drop receiver
+    pub file_drop_rx: Option<Receiver<(Point<Pixels>, Vec<PathBuf>)>>,
+    /// Last drop position
+    pub last_drop_pos: Option<Point<Pixels>>,
+}
+
+/// Preview panel state - tabs, panes, search, scroll handles
+pub struct PreviewState {
+    /// The preview panel with tabs
+    pub panel: Option<PreviewPanel>,
+    /// Tab being dragged (index)
+    pub dragging_tab: Option<usize>,
+    /// Target position for tab drop
+    pub tab_drag_target: Option<usize>,
+    /// Drop zone for creating split
+    pub tab_drag_split_zone: Option<super::SplitDropZone>,
+    /// Current drag position for ghost
+    pub tab_drag_position: Option<Point<Pixels>>,
+    /// Pending drag before threshold: (tab_index, start_pos, is_left_pane)
+    pub tab_drag_pending: Option<(usize, Point<Pixels>, bool)>,
+    /// Search input for preview panel
+    pub search: Option<Entity<InputState>>,
+    /// Current search query
+    pub search_query: String,
+    /// Search match positions (line, column)
+    pub search_matches: Vec<(usize, usize)>,
+    /// Current match index
+    pub search_current: usize,
+    /// Scroll handle for left pane tabs
+    pub left_tab_scroll: ScrollHandle,
+    /// Scroll handle for right pane tabs
+    pub right_tab_scroll: ScrollHandle,
+    /// Canvas/preview splitter dragging state
+    pub dragging_splitter: bool,
+    /// Pane splitter dragging state (for split panes)
+    pub dragging_pane_splitter: bool,
+    /// Splitter drag start position
+    pub splitter_drag_start: Option<Point<Pixels>>,
+}
+
+/// Settings state - settings data, UI state, theme/font selection
+pub struct SettingsState {
+    /// Settings data
+    pub data: Settings,
+    /// Show settings modal
+    pub show: bool,
+    /// Backdrop clicked flag
+    pub backdrop_clicked: bool,
+    /// Current settings tab
+    pub tab: SettingsTab,
+    /// Selected theme index in settings
+    pub theme_index: usize,
+    /// Scroll handle for theme list
+    pub theme_scroll: ScrollHandle,
+    /// Selected font index in settings
+    pub font_index: usize,
+    /// Scroll handle for font list
+    pub font_scroll: ScrollHandle,
+}
+
+/// WebView management - YouTube, Audio, Video webviews
+pub struct WebViewManager {
+    /// YouTube WebViews keyed by item ID
+    pub youtube: HashMap<u64, YouTubeWebView>,
+    /// Audio WebViews keyed by item ID
+    pub audio: HashMap<u64, AudioWebView>,
+    /// Video WebViews keyed by item ID
+    pub video: HashMap<u64, VideoWebView>,
+    /// When items went out of viewport (for delayed unload)
+    pub out_of_range_since: HashMap<u64, Instant>,
+}
+
+/// Tool state - selected tool and drawing state
+pub struct ToolState {
+    /// Currently selected tool
+    pub selected: ToolType,
+    /// Drawing start position (for shape/arrow tools)
+    pub drawing_start: Option<Point<Pixels>>,
+    /// Drawing current position (for shape/arrow tools)
+    pub drawing_current: Option<Point<Pixels>>,
+}
+
+/// UI state - modals, overlays, toasts, scroll handles
+pub struct UiState {
+    /// Show keyboard shortcuts overlay
+    pub show_shortcuts: bool,
+    /// Command palette input
+    pub command_palette: Option<Entity<InputState>>,
+    /// Command to execute (deferred until we have window access)
+    pub pending_command: Option<String>,
+    /// Search results: (item_id, display_name)
+    pub search_results: Vec<(u64, String)>,
+    /// Currently selected search result index
+    pub selected_result: usize,
+    /// Current command palette mode: items or themes
+    pub cmd_palette_mode: CmdPaletteMode,
+    /// Command palette scroll handle
+    pub cmd_palette_scroll: ScrollHandle,
+    /// Modal focus index for Tab cycling
+    pub modal_focus_index: usize,
+    /// Toast notification manager
+    pub toast_manager: ToastManager,
+    /// Pan animation state
+    pub pan_animation: Option<PanAnimation>,
+    /// Modal animation states
+    pub modal_animations: ModalAnimationState,
+}
+
+/// Performance and system state
+pub struct SystemState {
+    /// Frame time history for FPS calculation
+    pub frame_times: Vec<Duration>,
+    /// Last frame timestamp
+    pub last_frame: Instant,
+    /// Total frame count
+    pub frame_count: u64,
+    /// Focus manager for handling focus across contexts
+    pub focus: FocusManager,
+    /// Hit tester for item detection
+    pub hit_tester: HitTester,
+    /// Performance monitor
+    pub perf_monitor: PerfMonitor,
+    /// Background task executor
+    pub background: BackgroundExecutor,
+    /// Settings file watcher for hot-reload
+    pub settings_watcher: Option<SettingsWatcher>,
+}
+
+/// Textbox editing state
+pub struct TextboxState {
+    /// ID of textbox being edited
+    pub editing_id: Option<u64>,
+    /// Input for editing textbox
+    pub input: Option<Entity<InputState>>,
+    /// Deferred drag for textboxes (to allow double-click)
+    pub pending_drag: Option<(u64, Point<Pixels>)>,
+}
+
+/// Table editing state
+pub struct TableEditState {
+    /// (table_item_id, row, col) of cell being edited
+    pub editing_cell: Option<(u64, usize, usize)>,
+    /// Input for table cell editing
+    pub cell_input: Option<Entity<InputState>>,
+    /// When editing started (used to prevent immediate blur)
+    pub editing_started_at: Option<std::time::Instant>,
+    /// Virtual scroll states keyed by table item ID
+    pub scroll_states: HashMap<u64, VirtualScrollState>,
+    /// gpui-component Table states keyed by table item ID
+    pub table_states: HashMap<u64, Entity<TableState<DataSourceDelegate>>>,
+}
+
+/// Main application state - composed of focused sub-structs
+pub struct Humanboard {
+    /// Navigation and view state
+    pub navigation: NavigationState,
+    /// Canvas interaction state
+    pub canvas: CanvasState,
+    /// Preview panel state
+    pub preview: PreviewState,
+    /// Settings state
+    pub settings: SettingsState,
+    /// WebView management
+    pub webviews: WebViewManager,
+    /// Tool state
+    pub tools: ToolState,
+    /// UI state
+    pub ui: UiState,
+    /// System and performance state
+    pub system: SystemState,
+    /// Textbox editing state
+    pub textbox: TextboxState,
+    /// Table editing state
+    pub table: TableEditState,
+    /// Chart configuration modal state
+    pub chart_config_modal: Option<ChartConfigModal>,
 }

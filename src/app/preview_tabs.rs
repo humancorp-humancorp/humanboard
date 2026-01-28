@@ -6,15 +6,15 @@ use gpui::*;
 impl Humanboard {
     pub fn close_preview(&mut self, cx: &mut Context<Self>) {
         // Clean up all webview resources before dropping the preview panel
-        if let Some(ref mut preview) = self.preview {
+        if let Some(ref mut preview) = self.preview.panel {
             preview.cleanup(cx);
         }
-        self.preview = None;
+        self.preview.panel = None;
         cx.notify();
     }
 
     pub fn close_tab(&mut self, tab_index: usize, cx: &mut Context<Self>) {
-        if let Some(ref mut preview) = self.preview {
+        if let Some(ref mut preview) = self.preview.panel {
             // Close tab in the focused pane
             if preview.is_pane_split && preview.focused_pane == FocusedPane::Right {
                 // Closing from right pane
@@ -69,7 +69,7 @@ impl Humanboard {
                         } else {
                             // No tabs anywhere, clean up and close preview panel
                             preview.cleanup(cx);
-                            self.preview = None;
+                            self.preview.panel = None;
                         }
                     } else {
                         if preview.active_tab >= preview.tabs.len() {
@@ -86,7 +86,7 @@ impl Humanboard {
 
     /// Convert a preview tab to a permanent tab
     pub fn make_tab_permanent(&mut self, tab_index: usize, cx: &mut Context<Self>) {
-        if let Some(ref mut preview) = self.preview {
+        if let Some(ref mut preview) = self.preview.panel {
             if let Some(tab) = preview.tabs.get_mut(tab_index) {
                 tab.make_permanent();
                 cx.notify();
@@ -96,7 +96,7 @@ impl Humanboard {
 
     /// Toggle the pinned state of a tab
     pub fn toggle_tab_pinned(&mut self, tab_index: usize, cx: &mut Context<Self>) {
-        if let Some(ref mut preview) = self.preview {
+        if let Some(ref mut preview) = self.preview.panel {
             if let Some(tab) = preview.tabs.get_mut(tab_index) {
                 let was_pinned = tab.is_pinned();
                 tab.toggle_pinned();
@@ -125,7 +125,7 @@ impl Humanboard {
 
     /// Reopen the most recently closed tab
     pub fn reopen_closed_tab(&mut self, cx: &mut Context<Self>) {
-        if let Some(ref mut preview) = self.preview {
+        if let Some(ref mut preview) = self.preview.panel {
             if let Some(tab) = preview.closed_tabs.pop() {
                 preview.tabs.push(tab);
                 preview.active_tab = preview.tabs.len() - 1;
@@ -136,7 +136,7 @@ impl Humanboard {
 
     /// Navigate back in tab history
     pub fn go_back(&mut self, cx: &mut Context<Self>) {
-        if let Some(ref mut preview) = self.preview {
+        if let Some(ref mut preview) = self.preview.panel {
             if let Some(prev_index) = preview.back_stack.pop() {
                 if prev_index < preview.tabs.len() {
                     // Push current to forward stack
@@ -150,7 +150,7 @@ impl Humanboard {
 
     /// Navigate forward in tab history
     pub fn go_forward(&mut self, cx: &mut Context<Self>) {
-        if let Some(ref mut preview) = self.preview {
+        if let Some(ref mut preview) = self.preview.panel {
             if let Some(next_index) = preview.forward_stack.pop() {
                 if next_index < preview.tabs.len() {
                     // Push current to back stack
@@ -170,10 +170,10 @@ impl Humanboard {
         cx: &mut Context<Self>,
     ) {
         tracing::debug!("start_tab_drag: index={}", tab_index);
-        self.dragging_tab = Some(tab_index);
-        self.tab_drag_target = Some(tab_index);
-        self.tab_drag_split_zone = None;
-        self.tab_drag_position = Some(position);
+        self.preview.dragging_tab = Some(tab_index);
+        self.preview.tab_drag_target = Some(tab_index);
+        self.preview.tab_drag_split_zone = None;
+        self.preview.tab_drag_position = Some(position);
         cx.notify();
     }
 
@@ -181,7 +181,7 @@ impl Humanboard {
     /// If there's a pending drag, check if threshold is reached and promote to actual drag
     pub fn update_tab_drag_position(&mut self, position: Point<Pixels>, cx: &mut Context<Self>) {
         // Check if we should promote pending drag to actual drag
-        if let Some((tab_index, start_pos, _is_left_pane)) = self.tab_drag_pending {
+        if let Some((tab_index, start_pos, _is_left_pane)) = self.preview.tab_drag_pending {
             let dx = (f32::from(position.x) - f32::from(start_pos.x)).abs();
             let dy = (f32::from(position.y) - f32::from(start_pos.y)).abs();
             let distance = (dx * dx + dy * dy).sqrt();
@@ -189,11 +189,11 @@ impl Humanboard {
             // Threshold of 5px before starting actual drag
             if distance > 5.0 {
                 // Promote to actual drag
-                self.dragging_tab = Some(tab_index);
-                self.tab_drag_target = Some(tab_index);
-                self.tab_drag_split_zone = None;
-                self.tab_drag_position = Some(position);
-                self.tab_drag_pending = None;
+                self.preview.dragging_tab = Some(tab_index);
+                self.preview.tab_drag_target = Some(tab_index);
+                self.preview.tab_drag_split_zone = None;
+                self.preview.tab_drag_position = Some(position);
+                self.preview.tab_drag_pending = None;
                 tracing::debug!("Promoted pending drag to actual drag: index={}", tab_index);
                 cx.notify();
                 return;
@@ -201,21 +201,21 @@ impl Humanboard {
         }
 
         // Update position for active drag
-        if self.dragging_tab.is_some() {
-            self.tab_drag_position = Some(position);
+        if self.preview.dragging_tab.is_some() {
+            self.preview.tab_drag_position = Some(position);
             cx.notify();
         }
     }
 
     /// Update the drag target position as mouse moves over tabs
     pub fn update_tab_drag_target(&mut self, target_index: usize, cx: &mut Context<Self>) {
-        if self.dragging_tab.is_some() {
+        if self.preview.dragging_tab.is_some() {
             // Clear split zone when hovering over tabs
-            if self.tab_drag_split_zone.is_some() {
-                self.tab_drag_split_zone = None;
+            if self.preview.tab_drag_split_zone.is_some() {
+                self.preview.tab_drag_split_zone = None;
             }
-            if self.tab_drag_target != Some(target_index) {
-                self.tab_drag_target = Some(target_index);
+            if self.preview.tab_drag_target != Some(target_index) {
+                self.preview.tab_drag_target = Some(target_index);
             }
             cx.notify();
         }
@@ -223,12 +223,12 @@ impl Humanboard {
 
     /// Set the split drop zone when dragging to edges
     pub fn set_tab_drag_split_zone(&mut self, zone: Option<SplitDropZone>, cx: &mut Context<Self>) {
-        if self.dragging_tab.is_some() && self.tab_drag_split_zone != zone {
+        if self.preview.dragging_tab.is_some() && self.preview.tab_drag_split_zone != zone {
             tracing::debug!("set_tab_drag_split_zone: {:?}", zone);
-            self.tab_drag_split_zone = zone;
+            self.preview.tab_drag_split_zone = zone;
             // Clear tab target when in split zone
             if zone.is_some() {
-                self.tab_drag_target = None;
+                self.preview.tab_drag_target = None;
             }
             cx.notify();
         }
@@ -238,13 +238,13 @@ impl Humanboard {
     pub fn finish_tab_drag(&mut self, cx: &mut Context<Self>) {
         tracing::debug!(
             "finish_tab_drag: dragging={:?}, split_zone={:?}, target={:?}",
-            self.dragging_tab,
-            self.tab_drag_split_zone,
-            self.tab_drag_target
+            self.preview.dragging_tab,
+            self.preview.tab_drag_split_zone,
+            self.preview.tab_drag_target
         );
         // Check if dropping on a split zone
-        if let (Some(from), Some(zone)) = (self.dragging_tab, self.tab_drag_split_zone) {
-            if let Some(ref mut preview) = self.preview {
+        if let (Some(from), Some(zone)) = (self.preview.dragging_tab, self.preview.tab_drag_split_zone) {
+            if let Some(ref mut preview) = self.preview.panel {
                 // Determine which pane we're dragging from
                 let from_right_pane =
                     preview.is_pane_split && preview.focused_pane == FocusedPane::Right;
@@ -326,18 +326,18 @@ impl Humanboard {
                     }
                 }
             }
-            self.dragging_tab = None;
-            self.tab_drag_target = None;
-            self.tab_drag_split_zone = None;
-            self.tab_drag_position = None;
+            self.preview.dragging_tab = None;
+            self.preview.tab_drag_target = None;
+            self.preview.tab_drag_split_zone = None;
+            self.preview.tab_drag_position = None;
             cx.notify();
             return;
         }
 
         // Normal tab reorder
-        if let (Some(from), Some(to)) = (self.dragging_tab, self.tab_drag_target) {
+        if let (Some(from), Some(to)) = (self.preview.dragging_tab, self.preview.tab_drag_target) {
             if from != to {
-                if let Some(ref mut preview) = self.preview {
+                if let Some(ref mut preview) = self.preview.panel {
                     // Don't allow moving tabs before pinned tabs (unless the dragged tab is pinned)
                     let pinned_count = preview.tabs.iter().filter(|t| t.is_pinned()).count();
                     let is_dragged_pinned = preview
@@ -373,19 +373,19 @@ impl Humanboard {
                 }
             }
         }
-        self.dragging_tab = None;
-        self.tab_drag_target = None;
-        self.tab_drag_split_zone = None;
-        self.tab_drag_position = None;
+        self.preview.dragging_tab = None;
+        self.preview.tab_drag_target = None;
+        self.preview.tab_drag_split_zone = None;
+        self.preview.tab_drag_position = None;
         cx.notify();
     }
 
     /// Cancel tab drag without reordering
     pub fn cancel_tab_drag(&mut self, cx: &mut Context<Self>) {
-        self.dragging_tab = None;
-        self.tab_drag_target = None;
-        self.tab_drag_split_zone = None;
-        self.tab_drag_position = None;
+        self.preview.dragging_tab = None;
+        self.preview.tab_drag_target = None;
+        self.preview.tab_drag_split_zone = None;
+        self.preview.tab_drag_position = None;
         cx.notify();
     }
 }

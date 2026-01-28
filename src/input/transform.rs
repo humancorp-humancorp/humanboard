@@ -1,18 +1,16 @@
 //! Canvas transformations - scroll, zoom, coordinate conversion.
 
 use crate::app::Humanboard;
-use crate::constants::{DOCK_WIDTH, HEADER_HEIGHT};
+use crate::input::coords::{CoordinateContext, CoordinateConverter};
 use crate::types::ItemContent;
 use gpui::*;
 
 impl Humanboard {
     /// Convert screen position to canvas position.
-    pub fn screen_to_canvas(&self, pos: Point<Pixels>, header_offset: f32) -> Point<Pixels> {
-        if let Some(ref board) = self.board {
-            let x = (f32::from(pos.x) - DOCK_WIDTH - f32::from(board.canvas_offset.x)) / board.zoom;
-            let y =
-                (f32::from(pos.y) - header_offset - f32::from(board.canvas_offset.y)) / board.zoom;
-            point(px(x), px(y))
+    pub fn screen_to_canvas(&self, pos: Point<Pixels>, _header_offset: f32) -> Point<Pixels> {
+        if let Some(ref board) = self.canvas.board {
+            let ctx = CoordinateContext::new(&board.canvas_offset, board.zoom);
+            CoordinateConverter::screen_to_canvas(pos, &ctx)
         } else {
             pos
         }
@@ -25,12 +23,12 @@ impl Humanboard {
         cx: &mut Context<Self>,
     ) {
         // Block canvas scroll when any modal/overlay is open
-        if self.command_palette.is_some() || self.show_settings || self.show_shortcuts {
+        if self.ui.command_palette.is_some() || self.settings.show || self.ui.show_shortcuts {
             return;
         }
 
         // Check if scrolling over preview panel - if so, let it handle its own scroll
-        if let Some(ref preview) = self.preview {
+        if let Some(ref preview) = self.preview.panel {
             let bounds = window.bounds();
             let in_preview = match preview.split {
                 crate::app::SplitDirection::Vertical => {
@@ -47,7 +45,7 @@ impl Humanboard {
             }
         }
 
-        let Some(ref mut board) = self.board else {
+        let Some(ref mut board) = self.canvas.board else {
             return;
         };
 
@@ -67,8 +65,10 @@ impl Humanboard {
         }
 
         // Convert screen position to canvas coordinates
-        let canvas_x = (f32::from(event.position.x) - DOCK_WIDTH - f32::from(board.canvas_offset.x)) / board.zoom;
-        let canvas_y = (f32::from(event.position.y) - HEADER_HEIGHT - f32::from(board.canvas_offset.y)) / board.zoom;
+        let ctx = CoordinateContext::new(&board.canvas_offset, board.zoom);
+        let canvas_pos = CoordinateConverter::screen_to_canvas(event.position, &ctx);
+        let canvas_x = f32::from(canvas_pos.x);
+        let canvas_y = f32::from(canvas_pos.y);
 
         // Check if mouse is over a table - let the Table component handle its own scroll
         let over_table = board.items.iter().any(|item| {

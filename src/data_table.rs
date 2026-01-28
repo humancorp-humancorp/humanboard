@@ -30,6 +30,9 @@ use gpui::prelude::FluentBuilder;
 use gpui::*;
 use gpui_component::{Icon, IconName, h_flex, v_flex};
 
+// Re-export for external use
+pub use gpui::ElementId;
+
 /// Page size options for pagination
 pub const PAGE_SIZE_OPTIONS: &[usize] = &[10, 25, 50, 100];
 

@@ -42,12 +42,12 @@ pub fn render_header_center(
             this.select_next_result(cx);
         }))
         .on_action(cx.listener(|this, _: &CmdPaletteUp, _, cx| {
-            if this.command_palette.is_some() {
+            if this.ui.command_palette.is_some() {
                 this.select_prev_result(cx);
             }
         }))
         .on_action(cx.listener(|this, _: &CmdPaletteDown, _, cx| {
-            if this.command_palette.is_some() {
+            if this.ui.command_palette.is_some() {
                 this.select_next_result(cx);
             }
         }))
@@ -55,7 +55,7 @@ pub fn render_header_center(
             this.hide_command_palette(window, cx);
         }))
         .on_key_down(cx.listener(|this, event: &KeyDownEvent, _, cx| {
-            if this.command_palette.is_some() {
+            if this.ui.command_palette.is_some() {
                 match &event.keystroke.key {
                     key if key == "up" => this.select_prev_result(cx),
                     key if key == "down" => this.select_next_result(cx),
@@ -217,14 +217,14 @@ fn render_dropdown_results(
                 .on_mouse_down(
                     MouseButton::Left,
                     cx.listener(move |this, _, _, cx| {
-                        if this.cmd_palette_mode == crate::app::CmdPaletteMode::Themes {
-                            this.pending_command = Some(format!("__theme:{}", name_clone));
+                        if this.ui.cmd_palette_mode == crate::app::CmdPaletteMode::Themes {
+                            this.ui.pending_command = Some(format!("__theme:{}", name_clone));
                         } else {
-                            this.pending_command = Some(format!("__jump:{}", item_id));
+                            this.ui.pending_command = Some(format!("__jump:{}", item_id));
                         }
-                        this.command_palette = None;
-                        this.search_results.clear();
-                        this.cmd_palette_mode = crate::app::CmdPaletteMode::Items;
+                        this.ui.command_palette = None;
+                        this.ui.search_results.clear();
+                        this.ui.cmd_palette_mode = crate::app::CmdPaletteMode::Items;
                         cx.notify();
                     }),
                 )

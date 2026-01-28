@@ -2,7 +2,7 @@
 //!
 //! This module is organized into several submodules:
 //! - `types` - Enums, structs, and type definitions
-//! - `state` - The Humanboard struct definition
+//! - `state` - The Humanboard struct definition and sub-structs
 //! - `lifecycle` - Initialization and cleanup methods
 //! - `board_management` - Board CRUD operations
 //! - `settings_handlers` - Theme, font, and settings management
@@ -32,3 +32,9 @@ mod table_editing;
 
 pub use types::*;
 pub use state::{ChartConfigModal, Humanboard};
+
+// Re-export sub-structs for use in other modules
+pub use state::{
+    NavigationState, CanvasState, PreviewState, SettingsState,
+    WebViewManager, ToolState, UiState, SystemState, TextboxState, TableEditState,
+};

@@ -5,7 +5,7 @@ use gpui::*;
 
 impl Humanboard {
     pub fn switch_tab(&mut self, tab_index: usize, cx: &mut Context<Self>) {
-        if let Some(ref mut preview) = self.preview {
+        if let Some(ref mut preview) = self.preview.panel {
             if tab_index < preview.tabs.len() && tab_index != preview.active_tab {
                 // Record in back stack for navigation history
                 preview.back_stack.push(preview.active_tab);
@@ -34,7 +34,7 @@ impl Humanboard {
 
     /// Switch to a specific tab in the specified pane (is_left_pane determines which pane)
     pub fn switch_tab_in_pane(&mut self, tab_index: usize, is_left_pane: bool, cx: &mut Context<Self>) {
-        if let Some(ref mut preview) = self.preview {
+        if let Some(ref mut preview) = self.preview.panel {
             if is_left_pane {
                 // Switch in left pane
                 if tab_index < preview.tabs.len() && tab_index != preview.active_tab {
@@ -89,7 +89,7 @@ impl Humanboard {
 
     /// Make a tab permanent (convert from preview tab) in the specified pane
     pub fn make_tab_permanent_in_pane(&mut self, tab_index: usize, is_left_pane: bool, cx: &mut Context<Self>) {
-        if let Some(ref mut preview) = self.preview {
+        if let Some(ref mut preview) = self.preview.panel {
             if is_left_pane {
                 if let Some(tab) = preview.tabs.get_mut(tab_index) {
                     tab.make_permanent();
@@ -108,7 +108,7 @@ impl Humanboard {
     pub fn close_tab_in_pane(&mut self, tab_index: usize, is_left_pane: bool, cx: &mut Context<Self>) {
         let mut should_close_preview = false;
 
-        if let Some(ref mut preview) = self.preview {
+        if let Some(ref mut preview) = self.preview.panel {
             if is_left_pane {
                 // Close from left pane
                 if tab_index < preview.tabs.len() {
@@ -179,14 +179,14 @@ impl Humanboard {
 
         // Close preview if all tabs are gone (after the borrow is released)
         if should_close_preview {
-            self.preview = None;
+            self.preview.panel = None;
             cx.notify();
         }
     }
 
     /// Toggle tab pinned state in the specified pane
     pub fn toggle_tab_pinned_in_pane(&mut self, tab_index: usize, is_left_pane: bool, cx: &mut Context<Self>) {
-        if let Some(ref mut preview) = self.preview {
+        if let Some(ref mut preview) = self.preview.panel {
             let tabs = if is_left_pane {
                 &mut preview.tabs
             } else {
@@ -230,24 +230,24 @@ impl Humanboard {
 
     /// Start tab drag in the specified pane (sets pending state, actual drag starts after threshold)
     pub fn start_tab_drag_in_pane(&mut self, tab_index: usize, position: Point<Pixels>, is_left_pane: bool, cx: &mut Context<Self>) {
-        if let Some(ref mut preview) = self.preview {
+        if let Some(ref mut preview) = self.preview.panel {
             // Set the focused pane to the one being dragged from
             preview.focused_pane = if is_left_pane { FocusedPane::Left } else { FocusedPane::Right };
         }
         // Set pending drag - actual drag starts after mouse moves beyond threshold
-        self.tab_drag_pending = Some((tab_index, position, is_left_pane));
+        self.preview.tab_drag_pending = Some((tab_index, position, is_left_pane));
         // Don't set dragging_tab yet - wait for threshold
         cx.notify();
     }
 
     /// Cancel pending drag (called on mouse up if threshold wasn't reached)
     pub fn cancel_pending_drag(&mut self, cx: &mut Context<Self>) {
-        self.tab_drag_pending = None;
+        self.preview.tab_drag_pending = None;
         cx.notify();
     }
 
     pub fn next_tab(&mut self, cx: &mut Context<Self>) {
-        if let Some(ref mut preview) = self.preview {
+        if let Some(ref mut preview) = self.preview.panel {
             if !preview.tabs.is_empty() {
                 preview.active_tab = (preview.active_tab + 1) % preview.tabs.len();
                 cx.notify();
@@ -256,7 +256,7 @@ impl Humanboard {
     }
 
     pub fn prev_tab(&mut self, cx: &mut Context<Self>) {
-        if let Some(ref mut preview) = self.preview {
+        if let Some(ref mut preview) = self.preview.panel {
             if !preview.tabs.is_empty() {
                 preview.active_tab = if preview.active_tab == 0 {
                     preview.tabs.len() - 1
@@ -269,7 +269,7 @@ impl Humanboard {
     }
 
     pub fn close_current_tab(&mut self, cx: &mut Context<Self>) {
-        if let Some(ref preview) = self.preview {
+        if let Some(ref preview) = self.preview.panel {
             let active = if preview.is_pane_split && preview.focused_pane == FocusedPane::Right {
                 preview.right_active_tab
             } else {
@@ -280,7 +280,7 @@ impl Humanboard {
     }
 
     pub fn toggle_split_direction(&mut self, cx: &mut Context<Self>) {
-        if let Some(ref mut preview) = self.preview {
+        if let Some(ref mut preview) = self.preview.panel {
             preview.split = match preview.split {
                 SplitDirection::Vertical => SplitDirection::Horizontal,
                 SplitDirection::Horizontal => SplitDirection::Vertical,
@@ -291,7 +291,7 @@ impl Humanboard {
 
     /// Split the preview panel into two panes
     pub fn split_pane(&mut self, cx: &mut Context<Self>) {
-        if let Some(ref mut preview) = self.preview {
+        if let Some(ref mut preview) = self.preview.panel {
             if !preview.is_pane_split {
                 preview.is_pane_split = true;
                 preview.pane_ratio = 0.5;
@@ -303,7 +303,7 @@ impl Humanboard {
 
     /// Close the split and merge into single pane
     pub fn close_split_pane(&mut self, cx: &mut Context<Self>) {
-        if let Some(ref mut preview) = self.preview {
+        if let Some(ref mut preview) = self.preview.panel {
             if preview.is_pane_split {
                 // Move right pane tabs to left pane
                 let mut right_tabs: Vec<PreviewTab> = preview.right_tabs.drain(..).collect();
@@ -330,7 +330,7 @@ impl Humanboard {
 
     /// Toggle split pane on/off
     pub fn toggle_pane_split(&mut self, cx: &mut Context<Self>) {
-        if let Some(ref preview) = self.preview {
+        if let Some(ref preview) = self.preview.panel {
             if preview.is_pane_split {
                 self.close_split_pane(cx);
             } else {
@@ -341,7 +341,7 @@ impl Humanboard {
 
     /// Focus the left pane
     pub fn focus_left_pane(&mut self, cx: &mut Context<Self>) {
-        if let Some(ref mut preview) = self.preview {
+        if let Some(ref mut preview) = self.preview.panel {
             preview.focused_pane = FocusedPane::Left;
             cx.notify();
         }
@@ -349,7 +349,7 @@ impl Humanboard {
 
     /// Focus the right pane
     pub fn focus_right_pane(&mut self, cx: &mut Context<Self>) {
-        if let Some(ref mut preview) = self.preview {
+        if let Some(ref mut preview) = self.preview.panel {
             if preview.is_pane_split {
                 preview.focused_pane = FocusedPane::Right;
                 cx.notify();
@@ -359,7 +359,7 @@ impl Humanboard {
 
     /// Move current tab to the other pane
     pub fn move_tab_to_other_pane(&mut self, cx: &mut Context<Self>) {
-        if let Some(ref mut preview) = self.preview {
+        if let Some(ref mut preview) = self.preview.panel {
             if !preview.is_pane_split {
                 // Auto-split when moving tab
                 preview.is_pane_split = true;

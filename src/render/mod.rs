@@ -54,7 +54,7 @@ pub const UI_FONT: &str = "Iosevka Nerd Font";
 impl Render for Humanboard {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         // Start frame timing
-        self.perf_monitor.begin_frame();
+        self.system.perf_monitor.begin_frame();
 
         self.update_fps();
 
@@ -67,33 +67,33 @@ impl Render for Humanboard {
         }
 
         // Update modal animations and request next frame if still animating
-        if self.modal_animations.update() {
+        if self.ui.modal_animations.update() {
             window.request_animation_frame();
         }
 
         // Check if settings close animation is complete
-        if self.modal_animations.settings_close_complete() {
-            self.show_settings = false;
-            self.modal_animations.settings = None;
+        if self.ui.modal_animations.settings_close_complete() {
+            self.settings.show = false;
+            self.ui.modal_animations.settings = None;
         }
 
         // Check if create board close animation is complete
-        if self.modal_animations.create_board_close_complete() {
+        if self.ui.modal_animations.create_board_close_complete() {
             self.finish_close_create_board();
-            self.modal_animations.create_board = None;
+            self.ui.modal_animations.create_board = None;
         }
 
         // Check if command palette close animation is complete
-        if self.modal_animations.command_palette_close_complete() {
+        if self.ui.modal_animations.command_palette_close_complete() {
             self.finish_close_command_palette();
-            self.modal_animations.command_palette = None;
+            self.ui.modal_animations.command_palette = None;
         }
 
         // Restore focus to canvas if needed (e.g., after closing command palette via blur)
-        self.focus.restore_focus_if_needed(window);
+        self.system.focus.restore_focus_if_needed(window);
 
         // Route based on current view
-        let content = match &self.view {
+        let content = match &self.navigation.view {
             AppView::Onboarding => self.render_onboarding_view(cx),
             AppView::Home => self.render_home_view(window, cx),
             AppView::Landing => self.render_landing_view(cx),
@@ -101,20 +101,20 @@ impl Render for Humanboard {
         };
 
         // Remove expired toasts
-        self.toast_manager.remove_expired();
+        self.ui.toast_manager.remove_expired();
 
         // Process completed background tasks
-        self.background.process_results();
+        self.system.background.process_results();
 
         // Check for settings file changes
         self.check_settings_reload(cx);
 
         // Check for debounced save
-        if let Some(ref mut board) = self.board {
+        if let Some(ref mut board) = self.canvas.board {
             if board.should_save() {
                 if let Err(e) = board.flush_save() {
                     // Show error toast for save failures with retry option
-                    self.toast_manager
+                    self.ui.toast_manager
                         .push(crate::notifications::Toast::error(format!(
                             "Save failed: {}",
                             e
@@ -125,43 +125,43 @@ impl Render for Humanboard {
 
         // Wrap everything in a container with overlays on top
         let bg = cx.theme().background;
-        let toasts = self.toast_manager.toasts().to_vec();
+        let toasts = self.ui.toast_manager.toasts().to_vec();
         let reduce_motion = crate::settings::app_settings().should_reduce_motion();
 
         // End frame timing (measures our render logic, not GPUI's paint)
-        self.perf_monitor.end_frame();
+        self.system.perf_monitor.end_frame();
 
         div()
             .size_full()
             .bg(bg)
-            .font_family(self.settings.font.clone())
+            .font_family(self.settings.data.font.clone())
             .relative()
             .child(content)
-            .when(self.show_shortcuts, |d| {
+            .when(self.ui.show_shortcuts, |d| {
                 d.child(render_shortcuts_overlay(cx))
             })
-            .when(self.show_settings, |d| {
+            .when(self.settings.show, |d| {
                 d.child(render_settings_modal(
-                    &self.settings.theme,
-                    &self.settings.font,
-                    self.settings_theme_index,
-                    &self.settings_theme_scroll,
-                    self.settings_tab,
-                    &self.focus.modal,
-                    self.modal_animations.settings_opacity(),
+                    &self.settings.data.theme,
+                    &self.settings.data.font,
+                    self.settings.theme_index,
+                    &self.settings.theme_scroll,
+                    self.settings.tab,
+                    &self.system.focus.modal,
+                    self.ui.modal_animations.settings_opacity(),
                     cx,
                 ))
             })
             .when_some(
-                self.create_board_input
+                self.navigation.create_board_input
                     .as_ref()
-                    .filter(|_| self.show_create_board_modal),
+                    .filter(|_| self.navigation.show_create_board_modal),
                 |d, input| {
                     d.child(render_create_board_modal(
                         input,
-                        &self.create_board_location,
-                        &self.focus.modal,
-                        self.modal_animations.create_board_opacity(),
+                        &self.navigation.create_board_location,
+                        &self.system.focus.modal,
+                        self.ui.modal_animations.create_board_opacity(),
                         cx,
                     ))
                 },
@@ -187,22 +187,22 @@ impl Humanboard {
         // Request animation frame to update countdown every second
         window.request_animation_frame();
 
-        render_home_screen(self.countdown.as_ref(), cx)
+        render_home_screen(self.navigation.countdown.as_ref(), cx)
     }
 
     /// Render the landing page view
     fn render_landing_view(&mut self, cx: &mut Context<Self>) -> Div {
-        let deleting_board = self.deleting_board_id.as_ref().and_then(|id| {
-            self.board_index
+        let deleting_board = self.navigation.deleting_board_id.as_ref().and_then(|id| {
+            self.navigation.board_index
                 .get_board(id)
                 .map(|meta| (id.as_str(), meta.name.as_str()))
         });
 
-        let is_editing = self.editing_board_id.is_some();
+        let is_editing = self.navigation.editing_board_id.is_some();
 
         div()
             .size_full()
-            .track_focus(&self.focus.landing)
+            .track_focus(&self.system.focus.landing)
             .key_context(FocusContext::KEY_LANDING)
             // Only steal focus when not editing (so Input can receive focus)
             .when(!is_editing, |d| {
@@ -210,7 +210,7 @@ impl Humanboard {
                     MouseButton::Left,
                     cx.listener(|this, _, window, _| {
                         // Use try_focus to respect focus hierarchy
-                        this.focus
+                        this.system.focus
                             .try_focus(crate::focus::FocusContext::Landing, window);
                     }),
                 )
@@ -223,27 +223,27 @@ impl Humanboard {
                 cx.listener(|this, _: &OpenSettings, window, cx| this.toggle_settings(window, cx)),
             )
             .on_action(cx.listener(|this, _: &ToolSelect, _, cx| {
-                this.selected_tool = crate::types::ToolType::Select;
+                this.tools.selected = crate::types::ToolType::Select;
                 cx.notify();
             }))
             .on_action(cx.listener(|this, _: &ToolText, _, cx| {
-                this.selected_tool = crate::types::ToolType::Text;
+                this.tools.selected = crate::types::ToolType::Text;
                 cx.notify();
             }))
             .on_action(cx.listener(|this, _: &ToolArrow, _, cx| {
-                this.selected_tool = crate::types::ToolType::Arrow;
+                this.tools.selected = crate::types::ToolType::Arrow;
                 cx.notify();
             }))
             .on_action(cx.listener(|this, _: &ToolShape, _, cx| {
-                this.selected_tool = crate::types::ToolType::Shape;
+                this.tools.selected = crate::types::ToolType::Shape;
                 cx.notify();
             }))
             .child(render_landing_page(
-                &self.board_index,
-                self.editing_board_id.as_deref(),
-                self.edit_input.as_ref(),
+                &self.navigation.board_index,
+                self.navigation.editing_board_id.as_deref(),
+                self.navigation.edit_input.as_ref(),
                 deleting_board,
-                self.show_trash,
+                self.navigation.show_trash,
                 cx,
             ))
     }
@@ -256,26 +256,26 @@ impl Humanboard {
     /// Render the board/canvas view
     fn render_board_view(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Div {
         // Poll for file picker results (from Cmd+O)
-        if let Some(rx) = &self.file_drop_rx {
+        if let Some(rx) = &self.canvas.file_drop_rx {
             if let Ok((pos, paths)) = rx.try_recv() {
-                if let Some(ref mut board) = self.board {
+                if let Some(ref mut board) = self.canvas.board {
                     let errors = board.handle_file_drop(pos, paths);
                     // Show toast notifications for any file copy errors
                     for error in errors {
-                        self.toast_manager.push(crate::notifications::Toast::error(error)
+                        self.ui.toast_manager.push(crate::notifications::Toast::error(error)
                             .with_action(crate::notifications::ToastAction::retry()));
                     }
                 }
-                self.file_drop_rx = None;
+                self.canvas.file_drop_rx = None;
                 cx.notify();
             }
         }
 
         // Ensure WebViews and editors are created if preview is active
-        if self.preview.is_some() {
+        if self.preview.panel.is_some() {
             let pdf_errors = self.ensure_pdf_webview(window, cx);
             for error in pdf_errors {
-                self.toast_manager.push(crate::notifications::Toast::error(error)
+                self.ui.toast_manager.push(crate::notifications::Toast::error(error)
                     .with_action(crate::notifications::ToastAction::reload_webview()));
             }
             self.ensure_code_editors(window, cx);
@@ -285,21 +285,21 @@ impl Humanboard {
         // Ensure YouTube WebViews are created for any YouTube items
         let youtube_errors = self.ensure_youtube_webviews(window, cx);
         for error in youtube_errors {
-            self.toast_manager.push(crate::notifications::Toast::error(error)
+            self.ui.toast_manager.push(crate::notifications::Toast::error(error)
                 .with_action(crate::notifications::ToastAction::reload_webview()));
         }
 
         // Ensure Audio WebViews are created for any Audio items
         let audio_errors = self.ensure_audio_webviews(window, cx);
         for error in audio_errors {
-            self.toast_manager.push(crate::notifications::Toast::error(error)
+            self.ui.toast_manager.push(crate::notifications::Toast::error(error)
                 .with_action(crate::notifications::ToastAction::reload_webview()));
         }
 
         // Ensure Video WebViews are created for any Video items
         let video_errors = self.ensure_video_webviews(window, cx);
         for error in video_errors {
-            self.toast_manager.push(crate::notifications::Toast::error(error)
+            self.ui.toast_manager.push(crate::notifications::Toast::error(error)
                 .with_action(crate::notifications::ToastAction::reload_webview()));
         }
 
@@ -308,7 +308,7 @@ impl Humanboard {
         self.update_webview_visibility(window, cx);
 
         // Get board data (with fallback defaults if somehow no board)
-        let (canvas_offset, zoom, items, item_count, data_sources) = if let Some(ref board) = self.board {
+        let (canvas_offset, zoom, items, item_count, data_sources) = if let Some(ref board) = self.canvas.board {
             (
                 board.canvas_offset,
                 board.zoom,
@@ -325,43 +325,43 @@ impl Humanboard {
         self.ensure_table_states(zoom, window, cx);
 
         let fps = self.calculate_fps();
-        let frame_count = self.frame_count;
-        let selected_items = self.selected_items.clone();
-        let selected_item_name = if self.selected_items.len() == 1 {
-            self.selected_items.iter().next().and_then(|&id| {
-                self.board
+        let frame_count = self.system.frame_count;
+        let selected_items = self.canvas.selected_items.clone();
+        let selected_item_name = if self.canvas.selected_items.len() == 1 {
+            self.canvas.selected_items.iter().next().and_then(|&id| {
+                self.canvas.board
                     .as_ref()
                     .and_then(|b| b.items.iter().find(|i| i.id == id))
                     .map(|i| i.content.display_name())
             })
-        } else if self.selected_items.len() > 1 {
-            Some(format!("{} items selected", self.selected_items.len()))
+        } else if self.canvas.selected_items.len() > 1 {
+            Some(format!("{} items selected", self.canvas.selected_items.len()))
         } else {
             None
         };
 
         // Marquee selection state
-        let marquee = match (self.marquee_start, self.marquee_current) {
+        let marquee = match (self.canvas.input_state.marquee_start(), self.canvas.input_state.marquee_current()) {
             (Some(start), Some(current)) => Some((start, current)),
             _ => None,
         };
 
         // Drawing preview state (for TextBox, Shape, Arrow while dragging)
-        let drawing_preview = match (self.drawing_start, self.drawing_current) {
-            (Some(start), Some(current)) => Some((start, current, self.selected_tool)),
+        let drawing_preview = match (self.canvas.input_state.drawing_start(), self.canvas.input_state.drawing_current()) {
+            (Some(start), Some(current)) => Some((start, current, self.tools.selected)),
             _ => None,
         };
 
         // Get board name from index
-        let board_name = if let AppView::Board(ref id) = self.view {
-            self.board_index.get_board(id).map(|m| m.name.clone())
+        let board_name = if let AppView::Board(ref id) = self.navigation.view {
+            self.navigation.board_index.get_board(id).map(|m| m.name.clone())
         } else {
             None
         };
 
         // Extract preview info
         let preview_info = self
-            .preview
+            .preview.panel
             .as_ref()
             .map(|p| (p, p.split, p.size, &p.tabs, p.active_tab, p.is_pane_split));
 
@@ -372,7 +372,7 @@ impl Humanboard {
             let available_width = f32::from(window_bounds.size.width) - DOCK_WIDTH;
             let available_height = f32::from(window_bounds.size.height) - HEADER_HEIGHT - FOOTER_HEIGHT;
 
-            if let Some(ref preview) = self.preview {
+            if let Some(ref preview) = self.preview.panel {
                 match preview.split {
                     SplitDirection::Vertical => {
                         let canvas_width = available_width * (1.0 - preview.size);
@@ -390,7 +390,7 @@ impl Humanboard {
 
         // Check if we should block canvas keyboard shortcuts
         // When input is active, we use a different key context to avoid shortcut conflicts
-        let input_active = self.focus.is_input_active();
+        let input_active = self.system.focus.is_input_active();
         let key_context = if input_active {
             FocusContext::KEY_CANVAS_INPUT_ACTIVE
         } else {
@@ -399,13 +399,13 @@ impl Humanboard {
 
         let base = div()
             .size_full()
-            .track_focus(&self.focus.canvas)
+            .track_focus(&self.system.focus.canvas)
             .key_context(key_context)
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(|this, event: &MouseDownEvent, window, cx| {
                     // Check if we're clicking in the preview panel area
-                    let in_preview_area = if let Some(ref preview) = this.preview {
+                    let in_preview_area = if let Some(ref preview) = this.preview.panel {
                         let bounds = window.bounds();
                         match preview.split {
                             SplitDirection::Vertical => {
@@ -426,8 +426,8 @@ impl Humanboard {
                     if !in_preview_area {
                         // Only handle canvas clicks if no modal/palette is open
                         // (they have their own click handlers for backdrops)
-                        if this.command_palette.is_none() && !this.show_settings {
-                            this.focus.force_canvas_focus(window);
+                        if this.ui.command_palette.is_none() && !this.settings.show {
+                            this.system.focus.force_canvas_focus(window);
                             this.handle_mouse_down(event, window, cx);
                         }
                     }
@@ -485,18 +485,18 @@ impl Humanboard {
                 this.toggle_command_palette(window, cx)
             }))
             .on_action(cx.listener(|this, _: &CloseCommandPalette, window, cx| {
-                if this.command_palette.is_some() {
+                if this.ui.command_palette.is_some() {
                     this.close_command_palette(window, cx)
                 }
             }))
             // Command palette arrow navigation - handlers at root level to catch global keybindings
             .on_action(cx.listener(|this, _: &CmdPaletteUp, _, cx| {
-                if this.command_palette.is_some() {
+                if this.ui.command_palette.is_some() {
                     this.select_prev_result(cx);
                 }
             }))
             .on_action(cx.listener(|this, _: &CmdPaletteDown, _, cx| {
-                if this.command_palette.is_some() {
+                if this.ui.command_palette.is_some() {
                     this.select_next_result(cx);
                 }
             }))
@@ -504,23 +504,23 @@ impl Humanboard {
                 cx.listener(|this, _: &OpenSettings, window, cx| this.toggle_settings(window, cx)),
             )
             .on_action(cx.listener(|this, _: &ToolSelect, _, cx| {
-                this.selected_tool = crate::types::ToolType::Select;
+                this.tools.selected = crate::types::ToolType::Select;
                 cx.notify();
             }))
             .on_action(cx.listener(|this, _: &ToolText, _, cx| {
-                this.selected_tool = crate::types::ToolType::Text;
+                this.tools.selected = crate::types::ToolType::Text;
                 cx.notify();
             }))
             .on_action(cx.listener(|this, _: &ToolArrow, _, cx| {
-                this.selected_tool = crate::types::ToolType::Arrow;
+                this.tools.selected = crate::types::ToolType::Arrow;
                 cx.notify();
             }))
             .on_action(cx.listener(|this, _: &ToolShape, _, cx| {
-                this.selected_tool = crate::types::ToolType::Shape;
+                this.tools.selected = crate::types::ToolType::Shape;
                 cx.notify();
             }))
             .on_action(cx.listener(|this, _: &CancelTextboxEdit, window, cx| {
-                if this.editing_textbox_id.is_some() {
+                if this.textbox.editing_id.is_some() {
                     this.cancel_textbox_editing_with_window(window, cx);
                 }
             }))
@@ -530,13 +530,13 @@ impl Humanboard {
                     return;
                 }
 
-                let drop_pos = if let Some(pos) = this.last_drop_pos {
+                let drop_pos = if let Some(pos) = this.canvas.last_drop_pos {
                     pos
                 } else {
                     let bounds = window.bounds();
                     let window_size = bounds.size;
 
-                    let (canvas_center_x, canvas_center_y) = if let Some(ref preview) = this.preview
+                    let (canvas_center_x, canvas_center_y) = if let Some(ref preview) = this.preview.panel
                     {
                         match preview.split {
                             SplitDirection::Vertical => {
@@ -561,7 +561,7 @@ impl Humanboard {
                 };
 
                 let count = all_paths.len();
-                if let Some(ref mut board) = this.board {
+                if let Some(ref mut board) = this.canvas.board {
                     board.handle_file_drop(drop_pos, all_paths);
                 }
                 // Show toast notification
@@ -574,7 +574,7 @@ impl Humanboard {
                 cx.notify();
             }));
 
-        let selected_tool = self.selected_tool;
+        let selected_tool = self.tools.selected;
         let content = match preview_info {
             Some((preview_ref, split, size, tabs, active_tab, is_pane_split)) => {
                 let canvas_size = 1.0 - size;
@@ -589,7 +589,7 @@ impl Humanboard {
                         .child(render_tool_dock(
                             selected_tool,
                             |this, tool, _, cx| {
-                                this.selected_tool = tool;
+                                this.tools.selected = tool;
                                 cx.notify();
                             },
                             cx,
@@ -613,16 +613,16 @@ impl Humanboard {
                                             zoom,
                                             &items,
                                             &selected_items,
-                                            &self.youtube_webviews,
-                                            &self.audio_webviews,
-                                            &self.video_webviews,
+                                            &self.webviews.youtube,
+                                            &self.webviews.audio,
+                                            &self.webviews.video,
                                             &data_sources,
-                                            &self.table_scroll_states,
-                                            &self.table_states,
-                                            self.editing_textbox_id,
-                                            self.textbox_input.as_ref(),
-                                            self.editing_table_cell,
-                                            self.table_cell_input.as_ref(),
+                                            &self.table.scroll_states,
+                                            &self.table.table_states,
+                                            self.textbox.editing_id,
+                                            self.textbox.input.as_ref(),
+                                            self.table.editing_cell,
+                                            self.table.cell_input.as_ref(),
                                             marquee,
                                             drawing_preview,
                                             canvas_viewport_size,
@@ -645,39 +645,39 @@ impl Humanboard {
                                         // Render split panes
                                         container.child(render_split_panes(
                                             preview_ref,
-                                            &self.preview_tab_scroll,
-                                            &self.preview_right_tab_scroll,
-                                            self.dragging_tab,
-                                            self.tab_drag_target,
-                                            self.preview_search.as_ref(),
-                                            self.preview_search_matches.len(),
-                                            self.preview_search_current,
-                                            self.tab_drag_split_zone,
+                                            &self.preview.left_tab_scroll,
+                                            &self.preview.right_tab_scroll,
+                                            self.preview.dragging_tab,
+                                            self.preview.tab_drag_target,
+                                            self.preview.search.as_ref(),
+                                            self.preview.search_matches.len(),
+                                            self.preview.search_current,
+                                            self.preview.tab_drag_split_zone,
                                             cx,
                                         ))
                                     } else {
                                         // Render single pane with drop zones overlay
-                                        let dragging = self.dragging_tab;
-                                        let split_zone = self.tab_drag_split_zone;
+                                        let dragging = self.preview.dragging_tab;
+                                        let split_zone = self.preview.tab_drag_split_zone;
                                         container
                                             .relative()
                                             .child(render_tab_bar(
                                                 tabs,
                                                 active_tab,
-                                                &self.preview_tab_scroll,
-                                                self.dragging_tab,
-                                                self.tab_drag_target,
+                                                &self.preview.left_tab_scroll,
+                                                self.preview.dragging_tab,
+                                                self.preview.tab_drag_target,
                                                 true, // is_left_pane (single pane = left)
                                                 cx,
                                             ))
                                             // Search bar (when active)
                                             .when_some(
-                                                self.preview_search.as_ref(),
+                                                self.preview.search.as_ref(),
                                                 |d, search_input| {
                                                     d.child(render_search_bar(
                                                         search_input,
-                                                        self.preview_search_matches.len(),
-                                                        self.preview_search_current,
+                                                        self.preview.search_matches.len(),
+                                                        self.preview.search_current,
                                                         cx,
                                                     ))
                                                 },
@@ -724,7 +724,7 @@ impl Humanboard {
                         .child(render_tool_dock(
                             selected_tool,
                             |this, tool, _, cx| {
-                                this.selected_tool = tool;
+                                this.tools.selected = tool;
                                 cx.notify();
                             },
                             cx,
@@ -745,16 +745,16 @@ impl Humanboard {
                                             zoom,
                                             &items,
                                             &selected_items,
-                                            &self.youtube_webviews,
-                                            &self.audio_webviews,
-                                            &self.video_webviews,
+                                            &self.webviews.youtube,
+                                            &self.webviews.audio,
+                                            &self.webviews.video,
                                             &data_sources,
-                                            &self.table_scroll_states,
-                                            &self.table_states,
-                                            self.editing_textbox_id,
-                                            self.textbox_input.as_ref(),
-                                            self.editing_table_cell,
-                                            self.table_cell_input.as_ref(),
+                                            &self.table.scroll_states,
+                                            &self.table.table_states,
+                                            self.textbox.editing_id,
+                                            self.textbox.input.as_ref(),
+                                            self.table.editing_cell,
+                                            self.table.cell_input.as_ref(),
                                             marquee,
                                             drawing_preview,
                                             canvas_viewport_size,
@@ -777,39 +777,39 @@ impl Humanboard {
                                         // Render split panes
                                         container.child(render_split_panes(
                                             preview_ref,
-                                            &self.preview_tab_scroll,
-                                            &self.preview_right_tab_scroll,
-                                            self.dragging_tab,
-                                            self.tab_drag_target,
-                                            self.preview_search.as_ref(),
-                                            self.preview_search_matches.len(),
-                                            self.preview_search_current,
-                                            self.tab_drag_split_zone,
+                                            &self.preview.left_tab_scroll,
+                                            &self.preview.right_tab_scroll,
+                                            self.preview.dragging_tab,
+                                            self.preview.tab_drag_target,
+                                            self.preview.search.as_ref(),
+                                            self.preview.search_matches.len(),
+                                            self.preview.search_current,
+                                            self.preview.tab_drag_split_zone,
                                             cx,
                                         ))
                                     } else {
                                         // Render single pane with drop zones overlay
-                                        let dragging = self.dragging_tab;
-                                        let split_zone = self.tab_drag_split_zone;
+                                        let dragging = self.preview.dragging_tab;
+                                        let split_zone = self.preview.tab_drag_split_zone;
                                         container
                                             .relative()
                                             .child(render_tab_bar(
                                                 tabs,
                                                 active_tab,
-                                                &self.preview_tab_scroll,
-                                                self.dragging_tab,
-                                                self.tab_drag_target,
+                                                &self.preview.left_tab_scroll,
+                                                self.preview.dragging_tab,
+                                                self.preview.tab_drag_target,
                                                 true, // is_left_pane (single pane = left)
                                                 cx,
                                             ))
                                             // Search bar (when active)
                                             .when_some(
-                                                self.preview_search.as_ref(),
+                                                self.preview.search.as_ref(),
                                                 |d, search_input| {
                                                     d.child(render_search_bar(
                                                         search_input,
-                                                        self.preview_search_matches.len(),
-                                                        self.preview_search_current,
+                                                        self.preview.search_matches.len(),
+                                                        self.preview.search_current,
                                                         cx,
                                                     ))
                                                 },
@@ -858,7 +858,7 @@ impl Humanboard {
                 .child(render_tool_dock(
                     selected_tool,
                     |this, tool, _, cx| {
-                        this.selected_tool = tool;
+                        this.tools.selected = tool;
                         cx.notify();
                     },
                     cx,
@@ -868,16 +868,16 @@ impl Humanboard {
                     zoom,
                     &items,
                     &selected_items,
-                    &self.youtube_webviews,
-                    &self.audio_webviews,
-                    &self.video_webviews,
+                    &self.webviews.youtube,
+                    &self.webviews.audio,
+                    &self.webviews.video,
                     &data_sources,
-                    &self.table_scroll_states,
-                    &self.table_states,
-                    self.editing_textbox_id,
-                    self.textbox_input.as_ref(),
-                    self.editing_table_cell,
-                    self.table_cell_input.as_ref(),
+                    &self.table.scroll_states,
+                    &self.table.table_states,
+                    self.textbox.editing_id,
+                    self.textbox.input.as_ref(),
+                    self.table.editing_cell,
+                    self.table.cell_input.as_ref(),
                     marquee,
                     drawing_preview,
                     canvas_viewport_size,
@@ -892,24 +892,24 @@ impl Humanboard {
             canvas_offset,
             selected_item_name,
             None,
-            self.board.as_ref().is_some_and(|b| b.is_dirty()),
+            self.canvas.board.as_ref().is_some_and(|b| b.is_dirty()),
             cx,
         ))
         .child(render_header_bar(
             board_name,
-            self.command_palette.as_ref(),
-            &self.search_results,
-            self.selected_result,
-            &self.cmd_palette_scroll,
-            self.cmd_palette_mode,
-            &self.focus.command_palette,
+            self.ui.command_palette.as_ref(),
+            &self.ui.search_results,
+            self.ui.selected_result,
+            &self.ui.cmd_palette_scroll,
+            self.ui.cmd_palette_mode,
+            &self.system.focus.command_palette,
             cx,
         ));
 
         // Add drag ghost overlay when dragging a tab
         let content =
-            if let (Some(drag_idx), Some(drag_pos)) = (self.dragging_tab, self.tab_drag_position) {
-                if let Some(ref preview) = self.preview {
+            if let (Some(drag_idx), Some(drag_pos)) = (self.preview.dragging_tab, self.preview.tab_drag_position) {
+                if let Some(ref preview) = self.preview.panel {
                     if let Some(tab) = preview.tabs.get(drag_idx) {
                         content.child(render_drag_ghost(tab, drag_pos, cx))
                     } else {

@@ -345,7 +345,7 @@ pub fn render_toast(
                 .tooltip(label)
                 .on_click(cx.listener(move |this, _, window, cx| {
                     this.handle_toast_action(action_type.clone(), window, cx);
-                    this.toast_manager.remove(toast_id);
+                    this.ui.toast_manager.remove(toast_id);
                     cx.notify();
                 })),
         );

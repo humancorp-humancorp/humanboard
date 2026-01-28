@@ -194,7 +194,7 @@ impl Command for GoHomeCommand {
     }
 
     fn is_enabled(&self, app: &crate::app::Humanboard) -> bool {
-        matches!(app.view, crate::app::AppView::Board(_))
+        matches!(app.navigation.view, crate::app::AppView::Board(_))
     }
 
     fn execute(
@@ -347,7 +347,7 @@ impl Command for UndoCommand {
 
     fn is_enabled(&self, app: &crate::app::Humanboard) -> bool {
         // Check if there's history to undo (history_index > 0)
-        app.board.is_some()
+        app.canvas.board.as_ref().map_or(false, |b| b.can_undo())
     }
 
     fn execute(
@@ -382,7 +382,7 @@ impl Command for RedoCommand {
 
     fn is_enabled(&self, app: &crate::app::Humanboard) -> bool {
         // Check if there's history to redo
-        app.board.is_some()
+        app.canvas.board.as_ref().map_or(false, |b| b.can_redo())
     }
 
     fn execute(
@@ -416,7 +416,7 @@ impl Command for ZoomInCommand {
     }
 
     fn is_enabled(&self, app: &crate::app::Humanboard) -> bool {
-        app.board.is_some()
+        app.canvas.board.is_some()
     }
 
     fn execute(
@@ -454,7 +454,7 @@ impl Command for ZoomOutCommand {
     }
 
     fn is_enabled(&self, app: &crate::app::Humanboard) -> bool {
-        app.board.is_some()
+        app.canvas.board.is_some()
     }
 
     fn execute(
@@ -492,7 +492,7 @@ impl Command for ZoomResetCommand {
     }
 
     fn is_enabled(&self, app: &crate::app::Humanboard) -> bool {
-        app.board.is_some()
+        app.canvas.board.is_some()
     }
 
     fn execute(

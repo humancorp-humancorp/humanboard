@@ -1,0 +1,9 @@
+---
+source: tests/it/unit/snapshot_tests.rs
+assertion_line: 515
+expression: location
+---
+{
+  "type": "Custom",
+  "path": "/Users/user/Documents/Boards"
+}

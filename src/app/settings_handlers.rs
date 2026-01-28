@@ -7,32 +7,32 @@ use gpui_component::ActiveTheme;
 
 impl Humanboard {
     pub fn toggle_settings(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.show_settings {
+        if self.settings.show {
             // Start fade-out animation
-            self.modal_animations.close_settings();
+            self.ui.modal_animations.close_settings();
             // Force focus back to canvas when closing settings
-            self.focus.force_canvas_focus(window);
+            self.system.focus.force_canvas_focus(window);
         } else {
             // Open settings with fade-in animation
-            self.show_settings = true;
-            self.modal_animations.open_settings();
+            self.settings.show = true;
+            self.ui.modal_animations.open_settings();
 
             // Set focus context to Modal
-            self.focus.focus(FocusContext::Modal, window);
+            self.system.focus.focus(FocusContext::Modal, window);
             self.reset_modal_focus(); // Reset focus index for Tab cycling
 
             // Initialize theme index to current theme
             let themes = crate::settings::Settings::available_themes(cx);
-            self.settings_theme_index = themes
+            self.settings.theme_index = themes
                 .iter()
-                .position(|t| t == &self.settings.theme)
+                .position(|t| t == &self.settings.data.theme)
                 .unwrap_or(0);
 
             // Initialize font index to current font
             let fonts = crate::settings::Settings::available_fonts();
-            self.settings_font_index = fonts
+            self.settings.font_index = fonts
                 .iter()
-                .position(|f| *f == self.settings.font)
+                .position(|f| *f == self.settings.data.font)
                 .unwrap_or(0);
         }
         cx.notify();
@@ -41,37 +41,37 @@ impl Humanboard {
     pub fn select_next_theme(&mut self, cx: &mut Context<Self>) {
         let themes = crate::settings::Settings::available_themes(cx);
         if !themes.is_empty() {
-            self.settings_theme_index = (self.settings_theme_index + 1) % themes.len();
-            self.settings_theme_scroll
-                .scroll_to_item(self.settings_theme_index);
+            self.settings.theme_index = (self.settings.theme_index + 1) % themes.len();
+            self.settings.theme_scroll
+                .scroll_to_item(self.settings.theme_index);
             // Apply theme immediately
-            self.set_theme(themes[self.settings_theme_index].clone(), cx);
+            self.set_theme(themes[self.settings.theme_index].clone(), cx);
         }
     }
 
     pub fn select_prev_theme(&mut self, cx: &mut Context<Self>) {
         let themes = crate::settings::Settings::available_themes(cx);
         if !themes.is_empty() {
-            self.settings_theme_index = if self.settings_theme_index == 0 {
+            self.settings.theme_index = if self.settings.theme_index == 0 {
                 themes.len() - 1
             } else {
-                self.settings_theme_index - 1
+                self.settings.theme_index - 1
             };
-            self.settings_theme_scroll
-                .scroll_to_item(self.settings_theme_index);
+            self.settings.theme_scroll
+                .scroll_to_item(self.settings.theme_index);
             // Apply theme immediately
-            self.set_theme(themes[self.settings_theme_index].clone(), cx);
+            self.set_theme(themes[self.settings.theme_index].clone(), cx);
         }
     }
 
     /// Show a toast notification
     pub fn show_toast(&mut self, toast: crate::notifications::Toast) {
-        self.toast_manager.push(toast);
+        self.ui.toast_manager.push(toast);
     }
 
     pub fn set_theme(&mut self, theme_name: String, cx: &mut Context<Self>) {
-        self.settings.theme = theme_name.clone();
-        self.settings.save();
+        self.settings.data.theme = theme_name.clone();
+        self.settings.data.save();
 
         // Apply theme using the App context
         let theme_name = gpui::SharedString::from(theme_name);
@@ -95,37 +95,37 @@ impl Humanboard {
     }
 
     pub fn set_font(&mut self, font_name: String, cx: &mut Context<Self>) {
-        self.settings.font = font_name;
-        self.settings.save();
+        self.settings.data.font = font_name;
+        self.settings.data.save();
         cx.notify();
     }
 
     pub fn select_next_font(&mut self, cx: &mut Context<Self>) {
         let fonts = crate::settings::Settings::available_fonts();
         if !fonts.is_empty() {
-            self.settings_font_index = (self.settings_font_index + 1) % fonts.len();
-            self.settings_font_scroll
-                .scroll_to_item(self.settings_font_index);
-            self.set_font(fonts[self.settings_font_index].to_string(), cx);
+            self.settings.font_index = (self.settings.font_index + 1) % fonts.len();
+            self.settings.font_scroll
+                .scroll_to_item(self.settings.font_index);
+            self.set_font(fonts[self.settings.font_index].to_string(), cx);
         }
     }
 
     pub fn select_prev_font(&mut self, cx: &mut Context<Self>) {
         let fonts = crate::settings::Settings::available_fonts();
         if !fonts.is_empty() {
-            self.settings_font_index = if self.settings_font_index == 0 {
+            self.settings.font_index = if self.settings.font_index == 0 {
                 fonts.len() - 1
             } else {
-                self.settings_font_index - 1
+                self.settings.font_index - 1
             };
-            self.settings_font_scroll
-                .scroll_to_item(self.settings_font_index);
-            self.set_font(fonts[self.settings_font_index].to_string(), cx);
+            self.settings.font_scroll
+                .scroll_to_item(self.settings.font_index);
+            self.set_font(fonts[self.settings.font_index].to_string(), cx);
         }
     }
 
     pub fn toggle_shortcuts(&mut self, cx: &mut Context<Self>) {
-        self.show_shortcuts = !self.show_shortcuts;
+        self.ui.show_shortcuts = !self.ui.show_shortcuts;
         cx.notify();
     }
 
@@ -159,7 +159,7 @@ impl Humanboard {
     }
 
     pub fn set_settings_tab(&mut self, tab: SettingsTab, cx: &mut Context<Self>) {
-        self.settings_tab = tab;
+        self.settings.tab = tab;
         cx.notify();
     }
 
@@ -227,10 +227,10 @@ impl Humanboard {
 
     /// Get the number of focusable elements in the current modal
     fn modal_focusable_count(&self) -> usize {
-        if self.show_create_board_modal {
+        if self.navigation.show_create_board_modal {
             // Create Board modal: name input only (buttons are click-only)
             1
-        } else if self.show_settings {
+        } else if self.settings.show {
             // Settings modal: no keyboard-focusable elements (all mouse-driven)
             0
         } else {
@@ -246,7 +246,7 @@ impl Humanboard {
             return;
         }
 
-        self.modal_focus_index = (self.modal_focus_index + 1) % count;
+        self.ui.modal_focus_index = (self.ui.modal_focus_index + 1) % count;
         self.apply_modal_focus(window, cx);
     }
 
@@ -258,20 +258,20 @@ impl Humanboard {
             return;
         }
 
-        self.modal_focus_index = if self.modal_focus_index == 0 {
+        self.ui.modal_focus_index = if self.ui.modal_focus_index == 0 {
             count - 1
         } else {
-            self.modal_focus_index - 1
+            self.ui.modal_focus_index - 1
         };
         self.apply_modal_focus(window, cx);
     }
 
     /// Apply focus to the element at the current modal_focus_index
     fn apply_modal_focus(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.show_create_board_modal {
+        if self.navigation.show_create_board_modal {
             // Create Board modal: only the input is focusable
-            if self.modal_focus_index == 0 {
-                if let Some(ref input) = self.create_board_input {
+            if self.ui.modal_focus_index == 0 {
+                if let Some(ref input) = self.navigation.create_board_input {
                     input.update(cx, |state, cx| {
                         state.focus(window, cx);
                     });
@@ -284,6 +284,47 @@ impl Humanboard {
 
     /// Reset modal focus index when opening a modal
     pub fn reset_modal_focus(&mut self) {
-        self.modal_focus_index = 0;
+        self.ui.modal_focus_index = 0;
+    }
+
+    // ==================== Modal Backdrop Handlers ====================
+
+    /// Handle mouse down on settings backdrop - sets flag to track click origin
+    pub fn settings_backdrop_mouse_down(&mut self) {
+        self.settings.backdrop_clicked = true;
+    }
+
+    /// Handle mouse up on settings backdrop - closes modal if click started on backdrop
+    pub fn settings_backdrop_mouse_up(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.settings.backdrop_clicked {
+            self.settings.show = false;
+            self.settings.backdrop_clicked = false;
+            self.system.focus.force_canvas_focus(window);
+        }
+        cx.notify();
+    }
+
+    /// Reset settings backdrop flag when clicking on modal content
+    pub fn settings_backdrop_reset(&mut self) {
+        self.settings.backdrop_clicked = false;
+    }
+
+    /// Handle mouse down on create board backdrop - sets flag to track click origin
+    pub fn create_board_backdrop_mouse_down(&mut self, cx: &mut Context<Self>) {
+        self.navigation.create_board_backdrop_clicked = true;
+        cx.notify();
+    }
+
+    /// Handle mouse up on create board backdrop - closes modal if click started on backdrop
+    pub fn create_board_backdrop_mouse_up(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.navigation.create_board_backdrop_clicked {
+            self.close_create_board_modal(window, cx);
+        }
+        self.navigation.create_board_backdrop_clicked = false;
+    }
+
+    /// Reset create board backdrop flag when clicking on modal content
+    pub fn create_board_backdrop_reset(&mut self) {
+        self.navigation.create_board_backdrop_clicked = false;
     }
 }

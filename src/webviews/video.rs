@@ -19,7 +19,9 @@ use std::io::{Read, Seek, SeekFrom};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
+use std::sync::mpsc;
 use std::thread::{self, JoinHandle};
+use std::time::Duration;
 use tiny_http::{Header, Response, Server, StatusCode};
 use tracing::error;
 use wry::WebViewBuilder;
@@ -37,7 +39,7 @@ pub struct VideoWebView {
     pub webview_entity: Entity<WebView>,
     pub video_path: PathBuf,
     shutdown_flag: Arc<AtomicBool>,
-    _server_thread: Option<JoinHandle<()>>,
+    server_thread: Option<JoinHandle<()>>,
 }
 
 impl VideoWebView {
@@ -47,12 +49,19 @@ impl VideoWebView {
         let shutdown_flag = Arc::new(AtomicBool::new(false));
         let shutdown_flag_clone = shutdown_flag.clone();
 
+        // Channel for server startup synchronization
+        let (tx, rx) = mpsc::channel();
+
         let server_thread = thread::spawn(move || {
             let addr = format!("127.0.0.1:{}", port);
             let server = match Server::http(&addr) {
-                Ok(s) => s,
+                Ok(s) => {
+                    let _ = tx.send(Ok(()));
+                    s
+                }
                 Err(e) => {
                     error!("Failed to start video server on port {}: {}", port, e);
+                    let _ = tx.send(Err(e.to_string()));
                     return;
                 }
             };
@@ -102,7 +111,12 @@ impl VideoWebView {
             }
         });
 
-        std::thread::sleep(std::time::Duration::from_millis(50));
+        // Wait for server to start with timeout
+        match rx.recv_timeout(Duration::from_secs(5)) {
+            Ok(Ok(())) => {}
+            Ok(Err(e)) => return Err(format!("Failed to start server: {}", e)),
+            Err(_) => return Err("Server startup timeout".to_string()),
+        }
 
         let url = format!("http://127.0.0.1:{}/", port);
 
@@ -131,7 +145,7 @@ impl VideoWebView {
             webview_entity,
             video_path,
             shutdown_flag,
-            _server_thread: Some(server_thread),
+            server_thread: Some(server_thread),
         })
     }
 
@@ -179,57 +193,48 @@ impl VideoWebView {
             .map(|h| h.value.as_str().to_string());
 
         if let Some(range) = range_header {
-            // Parse range header: "bytes=start-end" or "bytes=start-"
-            if let Some(range_spec) = range.strip_prefix("bytes=") {
-                let parts: Vec<&str> = range_spec.split('-').collect();
-                if parts.len() >= 1 {
-                    let start: u64 = parts[0].parse().unwrap_or(0);
-                    let end: u64 = if parts.len() > 1 && !parts[1].is_empty() {
-                        parts[1].parse().unwrap_or(file_size - 1)
-                    } else {
-                        file_size - 1
-                    };
-
-                    let length = end - start + 1;
-
-                    // Seek to start position
-                    if file.seek(SeekFrom::Start(start)).is_err() {
-                        let _ = request.respond(Response::empty(StatusCode(500)));
-                        return;
-                    }
-
-                    // Read the requested range
-                    let mut buffer = vec![0u8; length as usize];
-                    if file.read_exact(&mut buffer).is_err() {
-                        // Try reading what we can
-                        let _ = file.seek(SeekFrom::Start(start));
-                        buffer.clear();
-                        let _ = file.take(length).read_to_end(&mut buffer);
-                    }
-
-                    let content_range = format!("bytes {}-{}/{}", start, end, file_size);
-
-                    let mut response = Response::from_data(buffer).with_status_code(StatusCode(206));
-                    if let Some(h) = create_header(&b"Content-Type"[..], mime.as_bytes()) {
-                        response = response.with_header(h);
-                    }
-                    if let Some(h) = create_header(&b"Content-Range"[..], content_range.as_bytes())
-                    {
-                        response = response.with_header(h);
-                    }
-                    if let Some(h) = create_header(&b"Accept-Ranges"[..], &b"bytes"[..]) {
-                        response = response.with_header(h);
-                    }
-                    if let Some(h) =
-                        create_header(&b"Content-Length"[..], length.to_string().as_bytes())
-                    {
-                        response = response.with_header(h);
-                    }
-
-                    let _ = request.respond(response);
+            use crate::webviews::ByteRange;
+            
+            if let Some(byte_range) = ByteRange::parse_header(&range, file_size) {
+                // Seek to start position
+                if file.seek(SeekFrom::Start(byte_range.start)).is_err() {
+                    let _ = request.respond(Response::empty(StatusCode(500)));
                     return;
                 }
+
+                // Read the requested range with safe buffer size
+                let length = byte_range.length();
+                let mut buffer = vec![0u8; length as usize];
+                if file.read_exact(&mut buffer).is_err() {
+                    // Try reading what we can
+                    let _ = file.seek(SeekFrom::Start(byte_range.start));
+                    buffer.clear();
+                    let _ = file.take(length).read_to_end(&mut buffer);
+                }
+
+                let mut response = Response::from_data(buffer).with_status_code(StatusCode(206));
+                if let Some(h) = create_header(&b"Content-Type"[..], mime.as_bytes()) {
+                    response = response.with_header(h);
+                }
+                if let Some(h) = create_header(
+                    &b"Content-Range"[..],
+                    byte_range.format_content_range().as_bytes(),
+                ) {
+                    response = response.with_header(h);
+                }
+                if let Some(h) = create_header(&b"Accept-Ranges"[..], &b"bytes"[..]) {
+                    response = response.with_header(h);
+                }
+                if let Some(h) =
+                    create_header(&b"Content-Length"[..], length.to_string().as_bytes())
+                {
+                    response = response.with_header(h);
+                }
+
+                let _ = request.respond(response);
+                return;
             }
+            // If range parsing fails, fall through to serve entire file (HTTP 200)
         }
 
         // No range request - serve entire file
@@ -256,6 +261,9 @@ impl VideoWebView {
 
 impl Drop for VideoWebView {
     fn drop(&mut self) {
-        self.shutdown_flag.store(true, Ordering::Relaxed);
+        self.shutdown_flag.store(true, Ordering::SeqCst);
+        if let Some(handle) = self.server_thread.take() {
+            let _ = handle.join();
+        }
     }
 }

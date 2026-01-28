@@ -73,7 +73,7 @@ pub fn render_command_palette(
                         this.hide_command_palette(window, cx);
                     }))
                     .on_key_down(cx.listener(|this, event: &KeyDownEvent, _, cx| {
-                        if this.command_palette.is_some() {
+                        if this.ui.command_palette.is_some() {
                             match &event.keystroke.key {
                                 key if key == "up" => this.select_prev_result(cx),
                                 key if key == "down" => this.select_next_result(cx),
@@ -196,9 +196,9 @@ fn render_palette_results(
                         })
                         .when(!is_selected, |d| d.hover(|s| s.bg(list_hover)))
                         .on_click(cx.listener(move |this, _, _, cx| {
-                            this.pending_command = Some(format!("__jump:{}", item_id));
-                            this.command_palette = None;
-                            this.search_results.clear();
+                            this.ui.pending_command = Some(format!("__jump:{}", item_id));
+                            this.ui.command_palette = None;
+                            this.ui.search_results.clear();
                             cx.notify();
                         }))
                         .child(

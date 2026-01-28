@@ -1,7 +1,15 @@
 //! CSV and TSV file parsing
 //!
 //! Parses CSV/TSV files into DataSource structs with automatic type inference.
+//!
+//! ## Memory Limits
+//!
+//! To prevent unbounded memory growth:
+//! - Files larger than 100MB require lazy loading (see [`MAX_CSV_SIZE_MB`])
+//! - Files with more than 100,000 rows require lazy loading (see [`MAX_CSV_ROWS`])
 
+use crate::constants::{MAX_CSV_ROWS, MAX_CSV_SIZE_MB};
+use crate::data::error::{DataError, DataResult};
 use crate::types::{DataCell, DataColumn, DataOrigin, DataRow, DataSource, DataType};
 use std::path::PathBuf;
 
@@ -9,34 +17,58 @@ use std::path::PathBuf;
 ///
 /// Automatically detects delimiter based on file extension (.tsv uses tab)
 /// or content analysis (whichever delimiter appears more frequently).
-pub fn parse_csv_file(path: &PathBuf) -> Result<DataSource, String> {
-    let content = std::fs::read_to_string(path)
-        .map_err(|e| format!("Failed to read file: {}", e))?;
+///
+/// # Memory Limits
+/// - Files larger than [`MAX_CSV_SIZE_MB`]MB will return [`DataError::TooLarge`]
+/// - Files with more than [`MAX_CSV_ROWS`] rows will return [`DataError::TooManyRows`]
+///
+/// For large files, use [`LazyDataSource`] instead.
+pub fn parse_csv_file(path: &PathBuf) -> DataResult<DataSource> {
+    // Check file size before reading
+    let metadata = std::fs::metadata(path)?;
+    let size_mb = metadata.len() / (1024 * 1024);
+    if size_mb > MAX_CSV_SIZE_MB as u64 {
+        return Err(DataError::TooLarge {
+            size_mb,
+            max_mb: MAX_CSV_SIZE_MB,
+        });
+    }
+
+    let content = std::fs::read_to_string(path)?;
 
     let delimiter = detect_delimiter(path, &content);
     parse_csv_content(&content, delimiter, Some(path.clone()))
 }
 
 /// Parse CSV/TSV content from a string
+///
+/// # Memory Limits
+/// - Content resulting in more than [`MAX_CSV_ROWS`] rows will return [`DataError::TooManyRows`]
 pub fn parse_csv_content(
     content: &str,
     delimiter: char,
     source_path: Option<PathBuf>,
-) -> Result<DataSource, String> {
+) -> DataResult<DataSource> {
     let mut lines = content.lines().peekable();
 
     // Parse header row
-    let header_line = lines.next().ok_or("Empty file")?;
+    let header_line = lines.next().ok_or(DataError::EmptyFile)?;
     let headers: Vec<&str> = split_csv_line(header_line, delimiter);
 
     if headers.is_empty() {
-        return Err("No columns found in header".to_string());
+        return Err(DataError::NoColumns);
     }
 
-    // Parse data rows
+    // Parse data rows with limit
     let mut rows: Vec<Vec<String>> = Vec::new();
     for line in lines {
         if !line.trim().is_empty() {
+            if rows.len() >= MAX_CSV_ROWS {
+                return Err(DataError::TooManyRows {
+                    rows: rows.len() + 1, // +1 for the current row that exceeded limit
+                    max_rows: MAX_CSV_ROWS,
+                });
+            }
             let cells: Vec<String> = split_csv_line(line, delimiter)
                 .into_iter()
                 .map(|s| s.to_string())
@@ -167,6 +199,56 @@ fn unquote(s: &str) -> &str {
     }
 }
 
+/// Check if a string looks like a number
+///
+/// Fixed to be less aggressive: rejects strings with multiple symbols
+/// or non-numeric characters beyond single symbols like $ or %.
+///
+/// # Examples
+/// - `"123"` -> true
+/// - `"$123.45"` -> true
+/// - `"1,2,3"` -> false (too many symbols)
+/// - `"abc"` -> false
+fn looks_like_number(s: &str) -> bool {
+    let cleaned = s.trim();
+    if cleaned.is_empty() {
+        return false;
+    }
+
+    // Check if there are any digits at all
+    if !cleaned.chars().any(|c| c.is_ascii_digit()) {
+        return false;
+    }
+
+    // Count currency and percent symbols
+    let symbol_count = cleaned.matches('$').count()
+        + cleaned.matches('%').count()
+        + cleaned.matches('€').count()
+        + cleaned.matches('£').count();
+
+    // Reject if more than 1 symbol
+    if symbol_count > 1 {
+        return false;
+    }
+
+    // Count commas - more than 1 comma is suspicious for thousand separators
+    let comma_count = cleaned.matches(',').count();
+    if comma_count > 1 {
+        return false;
+    }
+
+    // Remove allowed symbols for parsing
+    let cleaned = cleaned
+        .replace('$', "")
+        .replace('%', "")
+        .replace('€', "")
+        .replace('£', "")
+        .replace(',', ""); // Remove thousand separators
+
+    // Must be parseable as a number after cleaning
+    cleaned.parse::<f64>().is_ok()
+}
+
 /// Infer the data type for a column by sampling values
 fn infer_column_type(rows: &[Vec<String>], col_idx: usize) -> DataType {
     // Sample up to 100 rows for type inference
@@ -181,17 +263,8 @@ fn infer_column_type(rows: &[Vec<String>], col_idx: usize) -> DataType {
         return DataType::Text;
     }
 
-    // Check if all values are numbers
-    let all_numbers = sample.iter().all(|s| {
-        let trimmed = s.trim();
-        trimmed.parse::<f64>().is_ok()
-            || trimmed
-                .replace(',', "")
-                .replace('$', "")
-                .replace('%', "")
-                .parse::<f64>()
-                .is_ok()
-    });
+    // Check if all values look like numbers (using fixed detection)
+    let all_numbers = sample.iter().all(|s| looks_like_number(s));
     if all_numbers {
         return DataType::Number;
     }
@@ -251,7 +324,8 @@ pub fn write_csv_content(data_source: &DataSource, delimiter: char) -> String {
     let mut lines = Vec::new();
 
     // Write header row
-    let headers: Vec<String> = data_source.columns
+    let headers: Vec<String> = data_source
+        .columns
         .iter()
         .map(|col| quote_csv_field(&col.name, delimiter))
         .collect();
@@ -259,7 +333,8 @@ pub fn write_csv_content(data_source: &DataSource, delimiter: char) -> String {
 
     // Write data rows
     for row in &data_source.rows {
-        let cells: Vec<String> = row.cells
+        let cells: Vec<String> = row
+            .cells
             .iter()
             .map(|cell| quote_csv_field(&cell.to_string(), delimiter))
             .collect();
@@ -368,5 +443,56 @@ mod tests {
 
         assert_eq!(parsed.columns.len(), reparsed.columns.len());
         assert_eq!(parsed.rows.len(), reparsed.rows.len());
+    }
+
+    #[test]
+    fn test_looks_like_number() {
+        // Valid numbers
+        assert!(looks_like_number("123"));
+        assert!(looks_like_number("123.45"));
+        assert!(looks_like_number("$123.45"));
+        assert!(looks_like_number("123%"));
+        assert!(looks_like_number("$1,234.56"));
+        assert!(looks_like_number("-50"));
+        assert!(looks_like_number("0.5"));
+
+        // Invalid - should reject
+        assert!(!looks_like_number("1,2,3")); // Too many commas
+        assert!(!looks_like_number("$1$2")); // Multiple $ symbols
+        assert!(!looks_like_number("abc")); // No digits
+        assert!(!looks_like_number("")); // Empty
+        assert!(!looks_like_number("$123%")); // Multiple different symbols
+    }
+
+    #[test]
+    fn test_type_inference_not_too_aggressive() {
+        // "1,2,3" should NOT be detected as a number
+        let rows = vec![vec!["1,2,3".to_string()], vec!["4,5,6".to_string()]];
+        let data_type = infer_column_type(&rows, 0);
+        assert_eq!(data_type, DataType::Text);
+
+        // "$100" should still be detected as number
+        let rows = vec![vec!["$100".to_string()], vec!["$200".to_string()]];
+        let data_type = infer_column_type(&rows, 0);
+        assert_eq!(data_type, DataType::Number);
+    }
+
+    #[test]
+    fn test_row_limit() {
+        // Create a CSV with MAX_CSV_ROWS + 1 rows
+        let mut content = String::from("col1\n");
+        for i in 0..=MAX_CSV_ROWS {
+            content.push_str(&format!("{}\n", i));
+        }
+
+        let result = parse_csv_content(&content, ',', None);
+        assert!(result.is_err());
+        match result {
+            Err(DataError::TooManyRows { rows, max_rows }) => {
+                assert_eq!(max_rows, MAX_CSV_ROWS);
+                assert!(rows > MAX_CSV_ROWS);
+            }
+            _ => panic!("Expected TooManyRows error"),
+        }
     }
 }

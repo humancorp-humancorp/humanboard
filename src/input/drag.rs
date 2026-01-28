@@ -11,9 +11,10 @@
 //! Enable profiling with `cargo build --features profiling` to see timing.
 
 use crate::app::{Humanboard, SplitDirection};
-use crate::constants::{DOCK_WIDTH, HEADER_HEIGHT};
+use crate::constants::{DOCK_WIDTH, HEADER_HEIGHT, MAX_FONT_SIZE, MIN_ARROW_SIZE, MIN_FONT_SIZE, MIN_ITEM_SIZE};
+use crate::input::coords::{CoordinateContext, CoordinateConverter};
 use crate::profile_scope;
-use crate::types::ItemContent;
+use crate::types::{ArrowDirection, ItemContent};
 use gpui::*;
 
 impl Humanboard {
@@ -25,11 +26,11 @@ impl Humanboard {
     ) {
         profile_scope!("handle_mouse_move");
 
-        self.last_drop_pos = Some(event.position);
+        self.canvas.last_drop_pos = Some(event.position);
 
         // Handle splitter dragging (canvas/preview split)
-        if self.dragging_splitter {
-            if let Some(ref mut preview) = self.preview {
+        if self.canvas.input_state.is_splitter_dragging() {
+            if let Some(ref mut preview) = self.preview.panel {
                 let bounds = window.bounds();
                 let window_size = bounds.size;
 
@@ -51,8 +52,8 @@ impl Humanboard {
         }
 
         // Handle pane splitter dragging (between split panes)
-        if self.dragging_pane_splitter {
-            if let Some(ref mut preview) = self.preview {
+        if self.canvas.input_state.is_pane_splitter_dragging() {
+            if let Some(ref mut preview) = self.preview.panel {
                 if preview.is_pane_split {
                     let bounds = window.bounds();
                     let window_width = f32::from(bounds.size.width);
@@ -104,16 +105,16 @@ impl Humanboard {
             return;
         }
 
-        let Some(ref mut board) = self.board else {
+        let Some(ref mut board) = self.canvas.board else {
             return;
         };
 
         // Handle item resizing
-        if let Some(item_id) = self.resizing_item {
+        if let Some(item_id) = self.canvas.input_state.resizing_item() {
             profile_scope!("item_resize");
 
-            if let Some(start_size) = self.resize_start_size {
-                if let Some(start_pos) = self.resize_start_pos {
+            if let Some(start_size) = self.canvas.input_state.resize_start_size() {
+                if let Some(start_pos) = self.canvas.input_state.resize_start_pos() {
                     let zoom = board.zoom;
                     let delta_x = f32::from(event.position.x - start_pos.x) / zoom;
                     let delta_y = f32::from(event.position.y - start_pos.y) / zoom;
@@ -122,20 +123,14 @@ impl Humanboard {
                         ItemContent::Markdown { .. } => "markdown",
                         ItemContent::TextBox { .. } => "textbox",
                         ItemContent::Arrow { end_offset, .. } => {
-                            if end_offset.0 >= 0.0 && end_offset.1 >= 0.0 {
-                                "arrow_pp"
-                            } else if end_offset.0 < 0.0 && end_offset.1 >= 0.0 {
-                                "arrow_np"
-                            } else if end_offset.0 >= 0.0 && end_offset.1 < 0.0 {
-                                "arrow_pn"
-                            } else {
-                                "arrow_nn"
-                            }
+                            // Use ArrowDirection for type-safe quadrant encoding
+                            let _direction = ArrowDirection::from_offset(*end_offset);
+                            "arrow"
                         }
                         _ => "other",
                     });
 
-                    let original_font_size = self.resize_start_font_size;
+                    let original_font_size = self.canvas.input_state.resize_start_font_size();
 
                     let (new_width, new_height) = match item_type.as_deref() {
                         Some("markdown") => {
@@ -144,17 +139,17 @@ impl Humanboard {
                             let height = width / MD_ASPECT_RATIO;
                             (width, height)
                         }
-                        Some(arrow_type) if arrow_type.starts_with("arrow_") => {
+                        Some("arrow") => {
                             let scale_x = (start_size.0 + delta_x) / start_size.0;
                             let scale_y = (start_size.1 + delta_y) / start_size.1;
                             let scale = ((scale_x + scale_y) / 2.0).max(0.1);
-                            let width = (start_size.0 * scale).max(20.0);
-                            let height = (start_size.1 * scale).max(20.0);
+                            let width = (start_size.0 * scale).max(MIN_ARROW_SIZE);
+                            let height = (start_size.1 * scale).max(MIN_ARROW_SIZE);
                             (width, height)
                         }
                         _ => {
-                            let width = (start_size.0 + delta_x).max(50.0);
-                            let height = (start_size.1 + delta_y).max(50.0);
+                            let width = (start_size.0 + delta_x).max(MIN_ITEM_SIZE);
+                            let height = (start_size.1 + delta_y).max(MIN_ITEM_SIZE);
                             (width, height)
                         }
                     };
@@ -164,14 +159,15 @@ impl Humanboard {
                         item.size = (new_width, new_height);
 
                         if let ItemContent::Arrow { end_offset, .. } = &mut item.content {
-                            let sign_x = if end_offset.0 >= 0.0 { 1.0 } else { -1.0 };
-                            let sign_y = if end_offset.1 >= 0.0 { 1.0 } else { -1.0 };
+                            // Use ArrowDirection for type-safe sign extraction
+                            let direction = ArrowDirection::from_offset(*end_offset);
+                            let (sign_x, sign_y) = direction.to_signs();
                             *end_offset = (new_width * sign_x, new_height * sign_y);
                         }
 
                         if let ItemContent::TextBox { font_size, .. } = &mut item.content {
                             if let Some(orig_size) = original_font_size {
-                                *font_size = (orig_size * scale).max(8.0).min(200.0);
+                                *font_size = (orig_size * scale).max(MIN_FONT_SIZE).min(MAX_FONT_SIZE);
                             }
                         }
                     }
@@ -179,20 +175,19 @@ impl Humanboard {
                     cx.notify();
                 }
             }
-        } else if let Some(item_id) = self.dragging_item {
+        } else if let Some(item_id) = self.canvas.input_state.dragging_item() {
             // Handle item dragging
             profile_scope!("item_drag");
 
-            if let Some(offset) = self.item_drag_offset {
+            if let Some(offset) = self.canvas.input_state.drag_offset() {
                 let zoom = board.zoom;
-                let canvas_offset_x = f32::from(board.canvas_offset.x);
-                let canvas_offset_y = f32::from(board.canvas_offset.y);
-                let header_offset = HEADER_HEIGHT;
-                let new_x =
-                    (f32::from(event.position.x - offset.x) - DOCK_WIDTH - canvas_offset_x) / zoom;
-                let new_y =
-                    (f32::from(event.position.y - offset.y) - canvas_offset_y - header_offset)
-                        / zoom;
+                let ctx = CoordinateContext::new(&board.canvas_offset, zoom);
+
+                // Convert mouse position minus offset to canvas coordinates
+                let adjusted_pos = point(event.position.x - offset.x, event.position.y - offset.y);
+                let canvas_pos = CoordinateConverter::screen_to_canvas(adjusted_pos, &ctx);
+                let new_x = f32::from(canvas_pos.x);
+                let new_y = f32::from(canvas_pos.y);
 
                 let old_pos = board.get_item(item_id).map(|i| i.position);
 
@@ -200,9 +195,9 @@ impl Humanboard {
                     let delta_x = new_x - old_x;
                     let delta_y = new_y - old_y;
 
-                    if self.selected_items.contains(&item_id) && self.selected_items.len() > 1 {
+                    if self.canvas.selected_items.contains(&item_id) && self.canvas.selected_items.len() > 1 {
                         // Group move
-                        let selected_ids: Vec<u64> = self.selected_items.iter().copied().collect();
+                        let selected_ids: Vec<u64> = self.canvas.selected_items.iter().copied().collect();
                         for id in selected_ids {
                             if let Some(item) = board.get_item_mut(id) {
                                 item.position.0 += delta_x;
@@ -220,22 +215,22 @@ impl Humanboard {
                 board.mark_dirty();
                 cx.notify();
             }
-        } else if self.dragging {
+        } else if self.canvas.input_state.is_canvas_panning() {
             // Handle canvas panning
-            if let Some(last_pos) = self.last_mouse_pos {
+            if let Some(last_pos) = self.canvas.input_state.last_mouse_pos() {
                 let delta = event.position - last_pos;
                 board.canvas_offset = board.canvas_offset + delta;
-                self.last_mouse_pos = Some(event.position);
+                self.canvas.input_state.update_last_mouse_pos(event.position);
                 board.mark_dirty();
                 cx.notify();
             }
-        } else if self.marquee_start.is_some() {
+        } else if self.canvas.input_state.is_marquee_selecting() {
             // Update marquee selection rectangle
-            self.marquee_current = Some(event.position);
+            self.canvas.input_state.set_marquee_current(event.position);
             cx.notify();
-        } else if self.drawing_start.is_some() {
+        } else if self.tools.drawing_start.is_some() {
             // Update drawing preview position
-            self.drawing_current = Some(event.position);
+            self.tools.drawing_current = Some(event.position);
             cx.notify();
         }
     }

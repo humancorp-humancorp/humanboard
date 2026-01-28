@@ -17,6 +17,7 @@
 //! 3. `Resources/lib/libpdfium.dylib` in macOS bundle
 //! 4. System library fallback
 
+use crate::pdf::pdfium_loader::PdfiumLoader;
 use pdfium_render::prelude::*;
 use sha2::{Digest, Sha256};
 use std::io::Write;
@@ -30,7 +31,7 @@ pub fn generate_pdf_thumbnail<P: AsRef<Path>>(pdf_path: P) -> Option<PathBuf> {
     let _span = info_span!("generate_pdf_thumbnail", path = ?pdf_path).entered();
 
     // Load pdfium
-    let pdfium = match load_pdfium() {
+    let pdfium = match PdfiumLoader::load() {
         Ok(p) => p,
         Err(e) => {
             warn!("Failed to load pdfium library: {}", e);
@@ -107,51 +108,4 @@ pub fn generate_pdf_thumbnail<P: AsRef<Path>>(pdf_path: P) -> Option<PathBuf> {
     Some(thumbnail_path)
 }
 
-fn load_pdfium() -> Result<Pdfium, String> {
-    // Try to load from lib/ directory first (development)
-    let lib_path = std::env::current_dir()
-        .ok()
-        .map(|p| p.join("lib/libpdfium.dylib"));
 
-    if let Some(path) = lib_path {
-        if path.exists() {
-            if let Ok(bindings) = Pdfium::bind_to_library(&path) {
-                return Ok(Pdfium::new(bindings));
-            }
-        }
-    }
-
-    // Try relative to executable
-    let exe_path = std::env::current_exe()
-        .ok()
-        .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-        .map(|p| p.join("lib/libpdfium.dylib"));
-
-    if let Some(path) = exe_path {
-        if path.exists() {
-            if let Ok(bindings) = Pdfium::bind_to_library(&path) {
-                return Ok(Pdfium::new(bindings));
-            }
-        }
-    }
-
-    // Try macOS bundle Resources folder
-    let bundle_path = std::env::current_exe()
-        .ok()
-        .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-        .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-        .map(|p| p.join("Resources/lib/libpdfium.dylib"));
-
-    if let Some(path) = bundle_path {
-        if path.exists() {
-            if let Ok(bindings) = Pdfium::bind_to_library(&path) {
-                return Ok(Pdfium::new(bindings));
-            }
-        }
-    }
-
-    // Fallback to system library
-    Pdfium::bind_to_system_library()
-        .map(Pdfium::new)
-        .map_err(|e| format!("Failed to load pdfium: {:?}", e))
-}

@@ -19,7 +19,7 @@ impl Humanboard {
         cx: &mut Context<Self>,
     ) {
         // Get current cell value
-        let current_value = if let Some(ref board) = self.board {
+        let current_value = if let Some(ref board) = self.canvas.board {
             if let Some(item) = board.items.iter().find(|i| i.id == table_id) {
                 if let ItemContent::Table { data_source_id, .. } = &item.content {
                     if let Some(ds) = board.data_sources.get(data_source_id) {
@@ -46,15 +46,20 @@ impl Humanboard {
                 .default_value(current_value.clone())
         });
 
-        self.editing_table_cell = Some((table_id, row, col));
-        self.table_cell_input = Some(input_state.clone());
+        self.table.editing_cell = Some((table_id, row, col));
+        self.table.cell_input = Some(input_state.clone());
+        self.table.editing_started_at = Some(std::time::Instant::now());
 
         // Focus the input after it's mounted
+        // Use multiple deferred calls to ensure focus happens after all mouse events
         let input_clone = input_state.clone();
         window.defer(cx, move |window, cx| {
-            input_clone.update(cx, |state, cx| {
-                // Focus the input so user can type immediately
-                state.focus(window, cx);
+            window.defer(cx, move |window, cx| {
+                window.defer(cx, move |window, cx| {
+                    input_clone.update(cx, |state, cx| {
+                        state.focus(window, cx);
+                    });
+                });
             });
         });
 
@@ -68,8 +73,15 @@ impl Humanboard {
                         this.finish_table_cell_editing(cx);
                     }
                     gpui_component::input::InputEvent::Blur => {
-                        // Save on blur (click outside)
-                        this.finish_table_cell_editing(cx);
+                        // Save on blur (click outside), but ignore blur events that happen
+                        // immediately after starting editing (within 100ms)
+                        const MIN_EDIT_DURATION: std::time::Duration = std::time::Duration::from_millis(100);
+                        let should_save = this.table.editing_started_at
+                            .map(|t| t.elapsed() >= MIN_EDIT_DURATION)
+                            .unwrap_or(true);
+                        if should_save {
+                            this.finish_table_cell_editing(cx);
+                        }
                     }
                     _ => {}
                 }
@@ -82,19 +94,23 @@ impl Humanboard {
 
     /// Finish editing a table cell and save the value
     pub fn finish_table_cell_editing(&mut self, cx: &mut Context<Self>) {
-        let Some((table_id, row, col)) = self.editing_table_cell.take() else {
+        let Some((table_id, row, col)) = self.table.editing_cell.take() else {
             return;
         };
 
-        let Some(input) = self.table_cell_input.take() else {
+        let Some(input) = self.table.cell_input.take() else {
             return;
         };
+        
+        // Clear the editing timestamp
+        self.table.editing_started_at = None;
 
         // Get the new value from the input
         let new_value = input.read(cx).text().to_string();
 
         // Update the data source
-        if let Some(ref mut board) = self.board {
+        let mut updated_ds_id = None;
+        if let Some(ref mut board) = self.canvas.board {
             // Find the data source ID from the table item
             let data_source_id = board.items.iter()
                 .find(|i| i.id == table_id)
@@ -128,16 +144,57 @@ impl Humanboard {
                 // Mark as modified
                 board.push_history();
                 let _ = board.flush_save();
+                
+                updated_ds_id = Some(ds_id);
+            }
+        }
+        
+        // Sync updated data source to preview panel if it's open
+        if let Some(ds_id) = updated_ds_id {
+            if let Some(ref board) = self.canvas.board {
+                if let Some(ds) = board.data_sources.get(&ds_id) {
+                    self.sync_data_source_to_preview(ds_id, ds.clone(), cx);
+                }
             }
         }
 
         cx.notify();
     }
+    
+    /// Sync a data source update to any open preview tabs
+    fn sync_data_source_to_preview(&mut self, data_source_id: u64, data_source: crate::types::DataSource, cx: &mut Context<Self>) {
+        use crate::app::PreviewTab;
+        
+        if let Some(ref mut preview) = self.preview.panel {
+            // Sync to left pane tabs
+            for tab in preview.tabs.iter_mut() {
+                if let PreviewTab::Table { data_source_id: id, table_state: Some(state), .. } = tab {
+                    if *id == data_source_id {
+                        state.update(cx, |table_state, _cx| {
+                            table_state.delegate_mut().set_data_source(std::sync::Arc::new(data_source.clone()));
+                        });
+                    }
+                }
+            }
+            
+            // Sync to right pane tabs
+            for tab in preview.right_tabs.iter_mut() {
+                if let PreviewTab::Table { data_source_id: id, table_state: Some(state), .. } = tab {
+                    if *id == data_source_id {
+                        state.update(cx, |table_state, _cx| {
+                            table_state.delegate_mut().set_data_source(std::sync::Arc::new(data_source.clone()));
+                        });
+                    }
+                }
+            }
+        }
+    }
 
     /// Cancel table cell editing without saving
     pub fn cancel_table_cell_editing(&mut self, cx: &mut Context<Self>) {
-        self.editing_table_cell = None;
-        self.table_cell_input = None;
+        self.table.editing_cell = None;
+        self.table.cell_input = None;
+        self.table.editing_started_at = None;
         cx.notify();
     }
 
@@ -145,7 +202,7 @@ impl Humanboard {
     /// Call this before rendering to ensure all tables have their state initialized.
     /// Takes zoom to calculate actual pixel widths for columns.
     pub fn ensure_table_states(&mut self, zoom: f32, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(ref board) = self.board else {
+        let Some(ref board) = self.canvas.board else {
             return;
         };
 
@@ -156,7 +213,7 @@ impl Humanboard {
             .iter()
             .filter_map(|item| {
                 if let ItemContent::Table { data_source_id, .. } = &item.content {
-                    if !self.table_states.contains_key(&item.id) {
+                    if !self.table.table_states.contains_key(&item.id) {
                         Some((item.id, *data_source_id, item.size.0 * zoom))
                     } else {
                         None
@@ -172,7 +229,7 @@ impl Humanboard {
             if let Some(ds) = board.data_sources.get(&data_source_id) {
                 let delegate = DataSourceDelegate::with_width(Arc::new(ds.clone()), pixel_width);
                 let state = cx.new(|cx| TableState::new(delegate, window, cx));
-                self.table_states.insert(table_id, state);
+                self.table.table_states.insert(table_id, state);
             }
         }
 
@@ -190,7 +247,7 @@ impl Humanboard {
             .collect();
 
         for (table_id, pixel_width) in &existing_tables {
-            if let Some(state) = self.table_states.get(table_id) {
+            if let Some(state) = self.table.table_states.get(table_id) {
                 state.update(cx, |table_state, _cx| {
                     table_state.delegate_mut().set_container_width(*pixel_width);
                 });
@@ -199,13 +256,13 @@ impl Humanboard {
 
         // Clean up states for tables that no longer exist
         let existing_table_ids: std::collections::HashSet<u64> = existing_tables.iter().map(|(id, _)| *id).collect();
-        self.table_states.retain(|id, _| existing_table_ids.contains(id));
+        self.table.table_states.retain(|id, _| existing_table_ids.contains(id));
     }
 
     /// Update the data source for a specific table's TableState.
     /// Call this when the underlying data changes.
     pub fn update_table_data(&mut self, table_id: u64, cx: &mut Context<Self>) {
-        let Some(ref board) = self.board else {
+        let Some(ref board) = self.canvas.board else {
             return;
         };
 
@@ -223,7 +280,7 @@ impl Humanboard {
         });
 
         if let Some(ds) = data_source {
-            if let Some(state) = self.table_states.get(&table_id) {
+            if let Some(state) = self.table.table_states.get(&table_id) {
                 state.update(cx, |table_state, _cx| {
                     table_state.delegate_mut().set_data_source(Arc::new(ds));
                 });

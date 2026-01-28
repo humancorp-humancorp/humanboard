@@ -22,7 +22,7 @@ pub enum AppView {
 }
 
 /// Direction of the preview panel split with the canvas
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SplitDirection {
     Vertical,   // Panel on the right
     Horizontal, // Panel on the bottom

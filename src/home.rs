@@ -123,7 +123,7 @@ fn render_quick_actions(cx: &mut Context<crate::app::Humanboard>) -> impl IntoEl
                 .tooltip("Go to boards list")
                 .primary()
                 .on_click(cx.listener(|this, _, _, cx| {
-                    this.view = crate::app::AppView::Landing;
+                    this.navigation.view = crate::app::AppView::Landing;
                     cx.notify();
                 })),
         )

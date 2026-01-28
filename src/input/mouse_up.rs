@@ -1,7 +1,8 @@
 //! Mouse up event handling - finalize operations, create drawn items.
 
 use crate::app::Humanboard;
-use crate::constants::{DEFAULT_FONT_SIZE, DOCK_WIDTH, HEADER_HEIGHT};
+use crate::constants::{DEFAULT_FONT_SIZE, HEADER_HEIGHT, MIN_ARROW_SIZE, MIN_DRAW_DISTANCE, MIN_MARQUEE_SIZE};
+use crate::input::coords::{CoordinateContext, CoordinateConverter};
 use crate::types::{ArrowHead, DataSource, ItemContent, ShapeType, ToolType};
 use gpui::*;
 
@@ -13,23 +14,23 @@ impl Humanboard {
         cx: &mut Context<Self>,
     ) {
         // Only push history on mouse up if we were dragging/resizing
-        let was_modifying = self.dragging_item.is_some() || self.resizing_item.is_some();
+        let was_modifying = self.canvas.input_state.is_dragging() || self.canvas.input_state.is_resizing();
 
         if was_modifying {
-            if let Some(ref mut board) = self.board {
+            if let Some(ref mut board) = self.canvas.board {
                 // Update spatial index for modified items
-                if let Some(resize_id) = self.resizing_item {
+                if let Some(resize_id) = self.canvas.input_state.resizing_item() {
                     board.update_spatial_index(resize_id);
                 } else {
                     // Update spatial index for all dragged items
-                    for &item_id in &self.selected_items {
+                    for &item_id in &self.canvas.selected_items {
                         board.update_spatial_index(item_id);
                     }
                 }
 
                 board.push_history();
                 if let Err(e) = board.flush_save() {
-                    self.toast_manager
+                    self.ui.toast_manager
                         .push(crate::notifications::Toast::error(format!(
                             "Save failed: {}",
                             e
@@ -39,22 +40,23 @@ impl Humanboard {
         }
 
         // Finalize marquee selection using spatial index for O(log n + k) query
-        if let (Some(start), Some(end)) = (self.marquee_start, self.marquee_current) {
-            if let Some(ref board) = self.board {
-                let header_offset = HEADER_HEIGHT;
-
+        if let (Some(start), Some(end)) = (self.canvas.input_state.marquee_start(), self.canvas.input_state.marquee_current()) {
+            if let Some(ref board) = self.canvas.board {
                 let min_x = f32::from(start.x).min(f32::from(end.x));
                 let max_x = f32::from(start.x).max(f32::from(end.x));
                 let min_y = f32::from(start.y).min(f32::from(end.y));
                 let max_y = f32::from(start.y).max(f32::from(end.y));
 
                 // Only select if marquee has some size (not just a click)
-                if (max_x - min_x) > 5.0 || (max_y - min_y) > 5.0 {
+                if (max_x - min_x) > MIN_MARQUEE_SIZE || (max_y - min_y) > MIN_MARQUEE_SIZE {
                     // Convert screen coordinates to canvas coordinates
-                    let canvas_min_x = (min_x - DOCK_WIDTH - f32::from(board.canvas_offset.x)) / board.zoom;
-                    let canvas_max_x = (max_x - DOCK_WIDTH - f32::from(board.canvas_offset.x)) / board.zoom;
-                    let canvas_min_y = (min_y - header_offset - f32::from(board.canvas_offset.y)) / board.zoom;
-                    let canvas_max_y = (max_y - header_offset - f32::from(board.canvas_offset.y)) / board.zoom;
+                    let ctx = CoordinateContext::new(&board.canvas_offset, board.zoom);
+                    let canvas_min = CoordinateConverter::screen_to_canvas(point(px(min_x), px(min_y)), &ctx);
+                    let canvas_max = CoordinateConverter::screen_to_canvas(point(px(max_x), px(max_y)), &ctx);
+                    let canvas_min_x = f32::from(canvas_min.x);
+                    let canvas_max_x = f32::from(canvas_max.x);
+                    let canvas_min_y = f32::from(canvas_min.y);
+                    let canvas_max_y = f32::from(canvas_max.y);
 
                     // Query spatial index for items in rectangle
                     let intersecting_ids = board.query_items_in_rect(
@@ -63,13 +65,13 @@ impl Humanboard {
 
                     for item_id in intersecting_ids {
                         if event.modifiers.shift {
-                            if self.selected_items.contains(&item_id) {
-                                self.selected_items.remove(&item_id);
+                            if self.canvas.selected_items.contains(&item_id) {
+                                self.canvas.selected_items.remove(&item_id);
                             } else {
-                                self.selected_items.insert(item_id);
+                                self.canvas.selected_items.insert(item_id);
                             }
                         } else {
-                            self.selected_items.insert(item_id);
+                            self.canvas.selected_items.insert(item_id);
                         }
                     }
                 }
@@ -77,18 +79,18 @@ impl Humanboard {
         }
 
         // Finalize arrow/shape/text drawing
-        if let Some(start) = self.drawing_start {
+        if let Some(start) = self.tools.drawing_start {
             let end = event.position;
             let header_offset = HEADER_HEIGHT;
 
             let screen_width = (f32::from(end.x) - f32::from(start.x)).abs();
             let screen_height = (f32::from(end.y) - f32::from(start.y)).abs();
 
-            // Only create if dragged at least 10 pixels
-            if screen_width < 10.0 && screen_height < 10.0 {
-                self.drawing_start = None;
-                self.drawing_current = None;
-                self.selected_tool = ToolType::Select;
+            // Only create if dragged at least MIN_DRAW_DISTANCE pixels
+            if screen_width < MIN_DRAW_DISTANCE && screen_height < MIN_DRAW_DISTANCE {
+                self.tools.drawing_start = None;
+                self.tools.drawing_current = None;
+                self.tools.selected = ToolType::Select;
                 cx.notify();
                 return;
             }
@@ -101,18 +103,18 @@ impl Humanboard {
             let end_x = f32::from(end_canvas.x);
             let end_y = f32::from(end_canvas.y);
 
-            let width = (end_x - start_x).abs().max(20.0);
-            let height = (end_y - start_y).abs().max(20.0);
+            let width = (end_x - start_x).abs().max(MIN_ARROW_SIZE);
+            let height = (end_y - start_y).abs().max(MIN_ARROW_SIZE);
             let pos_x = start_x.min(end_x);
             let pos_y = start_y.min(end_y);
 
-            match self.selected_tool {
+            match self.tools.selected {
                 ToolType::Arrow => {
-                    if let Some(ref mut board) = self.board {
+                    if let Some(ref mut board) = self.canvas.board {
                         let box_x = start_x.min(end_x);
                         let box_y = start_y.min(end_y);
-                        let box_w = (end_x - start_x).abs().max(20.0);
-                        let box_h = (end_y - start_y).abs().max(20.0);
+                        let box_w = (end_x - start_x).abs().max(MIN_ARROW_SIZE);
+                        let box_h = (end_y - start_y).abs().max(MIN_ARROW_SIZE);
 
                         let arrow_start = (start_x - box_x, start_y - box_y);
                         let arrow_end = (end_x - box_x, end_y - box_y);
@@ -130,12 +132,12 @@ impl Humanboard {
                         if let Some(item) = board.get_item_mut(id) {
                             item.size = (box_w, box_h);
                         }
-                        self.selected_items.clear();
-                        self.selected_items.insert(id);
+                        self.canvas.selected_items.clear();
+                        self.canvas.selected_items.insert(id);
                     }
                 }
                 ToolType::Shape => {
-                    if let Some(ref mut board) = self.board {
+                    if let Some(ref mut board) = self.canvas.board {
                         let id = board.add_item(
                             point(px(pos_x), px(pos_y)),
                             ItemContent::Shape {
@@ -148,12 +150,12 @@ impl Humanboard {
                         if let Some(item) = board.get_item_mut(id) {
                             item.size = (width, height);
                         }
-                        self.selected_items.clear();
-                        self.selected_items.insert(id);
+                        self.canvas.selected_items.clear();
+                        self.canvas.selected_items.insert(id);
                     }
                 }
                 ToolType::Text => {
-                    if let Some(ref mut board) = self.board {
+                    if let Some(ref mut board) = self.canvas.board {
                         let id = board.add_item(
                             point(px(pos_x), px(pos_y)),
                             ItemContent::TextBox {
@@ -165,13 +167,13 @@ impl Humanboard {
                         if let Some(item) = board.get_item_mut(id) {
                             item.size = (width.max(100.0), height.max(40.0));
                         }
-                        self.selected_items.clear();
-                        self.selected_items.insert(id);
+                        self.canvas.selected_items.clear();
+                        self.canvas.selected_items.insert(id);
                         self.start_textbox_editing(id, window, cx);
                     }
                 }
                 ToolType::Table => {
-                    if let Some(ref mut board) = self.board {
+                    if let Some(ref mut board) = self.canvas.board {
                         // Create an empty data source for manual data entry
                         let ds = DataSource::new_empty(
                             board.next_data_source_id,
@@ -193,8 +195,8 @@ impl Humanboard {
                         if let Some(item) = board.get_item_mut(id) {
                             item.size = (width.max(300.0), height.max(200.0));
                         }
-                        self.selected_items.clear();
-                        self.selected_items.insert(id);
+                        self.canvas.selected_items.clear();
+                        self.canvas.selected_items.insert(id);
                     }
                 }
                 ToolType::Chart => {
@@ -204,25 +206,13 @@ impl Humanboard {
                 _ => {}
             }
 
-            self.selected_tool = ToolType::Select;
-            self.drawing_start = None;
-            self.drawing_current = None;
+            self.tools.selected = ToolType::Select;
+            self.tools.drawing_start = None;
+            self.tools.drawing_current = None;
         }
 
         // Reset all drag/resize state
-        self.dragging = false;
-        self.last_mouse_pos = None;
-        self.dragging_item = None;
-        self.item_drag_offset = None;
-        self.resizing_item = None;
-        self.resize_start_size = None;
-        self.resize_start_pos = None;
-        self.resize_start_font_size = None;
-        self.dragging_splitter = false;
-        self.dragging_pane_splitter = false;
-        self.splitter_drag_start = None;
-        self.marquee_start = None;
-        self.marquee_current = None;
+        self.canvas.input_state.reset();
         cx.notify();
     }
 }

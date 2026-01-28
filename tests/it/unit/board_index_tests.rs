@@ -37,7 +37,7 @@ fn test_uuid_generated_unique() {
     let meta1 = BoardMetadata::new("Test 1".to_string());
     let meta2 = BoardMetadata::new("Test 2".to_string());
     assert_ne!(meta1.id, meta2.id);
-    assert_eq!(meta1.id.len(), 32);
+    assert_eq!(meta1.id.len(), 36); // UUID v4 format with hyphens
 }
 
 #[test]

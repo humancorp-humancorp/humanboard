@@ -23,11 +23,11 @@ impl Humanboard {
     ) {
         profile_scope!("handle_mouse_down");
 
-        let Some(ref board) = self.board else { return };
+        let Some(ref board) = self.canvas.board else { return };
         let mouse_pos = event.position;
 
-        // Check if clicking on splitter bar
-        if let Some(ref preview) = self.preview {
+        // Check if clicking on splitter bar (canvas/preview split)
+        if let Some(ref preview) = self.preview.panel {
             let bounds = window.bounds();
             let window_size = bounds.size;
 
@@ -43,8 +43,7 @@ impl Humanboard {
             };
 
             if is_on_splitter {
-                self.dragging_splitter = true;
-                self.splitter_drag_start = Some(mouse_pos);
+                self.canvas.input_state.start_splitter_drag(mouse_pos, preview.split);
                 cx.notify();
                 return;
             }
@@ -70,12 +69,12 @@ impl Humanboard {
 
         // If a drawing tool is selected, prioritize drawing over item selection
         if matches!(
-            self.selected_tool,
+            self.tools.selected,
             ToolType::Text | ToolType::Arrow | ToolType::Shape
         ) {
-            self.drawing_start = Some(mouse_pos);
-            self.drawing_current = Some(mouse_pos);
-            self.selected_items.clear();
+            self.tools.drawing_start = Some(mouse_pos);
+            self.tools.drawing_current = Some(mouse_pos);
+            self.canvas.selected_items.clear();
             cx.notify();
             return;
         }
@@ -130,16 +129,16 @@ impl Humanboard {
         if let Some(item_id) = clicked_item_id {
             // Handle selection with Shift modifier for multi-select
             if event.modifiers.shift {
-                if self.selected_items.contains(&item_id) {
-                    self.selected_items.remove(&item_id);
+                if self.canvas.selected_items.contains(&item_id) {
+                    self.canvas.selected_items.remove(&item_id);
                 } else {
-                    self.selected_items.insert(item_id);
+                    self.canvas.selected_items.insert(item_id);
                 }
-            } else if self.selected_items.contains(&item_id) {
+            } else if self.canvas.selected_items.contains(&item_id) {
                 // Clicked on already-selected item - keep selection for group move
             } else {
-                self.selected_items.clear();
-                self.selected_items.insert(item_id);
+                self.canvas.selected_items.clear();
+                self.canvas.selected_items.insert(item_id);
             }
 
             // Handle double-click for preview or TextBox editing
@@ -207,45 +206,36 @@ impl Humanboard {
                     && f32::from(mouse_pos.y) <= corner_y + 5.0;
 
                 if in_corner {
-                    self.resizing_item = Some(item_id);
-                    self.resize_start_size = Some(size);
-                    self.resize_start_pos = Some(mouse_pos);
-                    self.resize_start_font_size =
+                    let original_font_size =
                         if let ItemContent::TextBox { font_size, .. } = content {
                             Some(*font_size)
                         } else {
                             None
                         };
+                    self.canvas.input_state.start_resizing(item_id, size, mouse_pos, original_font_size);
                 } else {
-                    self.dragging_item = Some(item_id);
-                    self.item_drag_offset = Some(point(
+                    let drag_offset = point(
                         mouse_pos.x - px(scaled_x),
                         mouse_pos.y - px(scaled_y),
-                    ));
+                    );
+                    self.canvas.input_state.start_dragging(item_id, drag_offset);
                 }
             }
-            self.focus.force_canvas_focus(window);
+            self.system.focus.force_canvas_focus(window);
         } else {
             // Clicked on empty canvas
-            self.focus.force_canvas_focus(window);
+            self.system.focus.force_canvas_focus(window);
 
-            match self.selected_tool {
+            match self.tools.selected {
                 ToolType::Select => {
-                    self.marquee_start = Some(mouse_pos);
-                    self.marquee_current = Some(mouse_pos);
+                    self.canvas.input_state.start_marquee(mouse_pos);
                     if !event.modifiers.shift {
-                        self.selected_items.clear();
+                        self.canvas.selected_items.clear();
                     }
                 }
-                ToolType::Text | ToolType::Arrow | ToolType::Shape => {
-                    self.drawing_start = Some(mouse_pos);
-                    self.drawing_current = Some(mouse_pos);
-                }
-                ToolType::Table | ToolType::Chart => {
-                    // Table and Chart creation handled via dedicated UI
-                    // Clicking on canvas just places a default item
-                    self.drawing_start = Some(mouse_pos);
-                    self.drawing_current = Some(mouse_pos);
+                ToolType::Text | ToolType::Arrow | ToolType::Shape | ToolType::Table | ToolType::Chart => {
+                    self.tools.drawing_start = Some(mouse_pos);
+                    self.tools.drawing_current = Some(mouse_pos);
                 }
             }
         }

@@ -1,8 +1,77 @@
-//! Shared modal utilities - keyboard badges, setting rows, section headers, dropdown markers.
+//! Shared modal utilities - keyboard badges, setting rows, section headers, dropdown markers, backdrop helpers.
 
 use crate::app::Humanboard;
+use crate::constants::MODAL_BACKDROP_OPACITY;
 use gpui::*;
 use gpui_component::{h_flex, v_flex, ActiveTheme as _};
+
+// ============================================================================
+// Backdrop Click-to-Close Pattern
+// ============================================================================
+
+/// Renders a modal backdrop with click-to-close behavior using state-tracking.
+///
+/// This pattern uses a boolean flag to distinguish between clicks on the backdrop
+/// versus clicks on the modal content. The flag is set on mouse down and checked
+/// on mouse up - only if the mouse went down on the backdrop (not the modal) does
+/// the close action trigger.
+///
+/// # Arguments
+/// * `id` - Element ID for the backdrop
+/// * `opacity` - Modal animation opacity (0.0 to 1.0)
+/// * `cx` - GPUI context
+/// * `on_backdrop_mouse_down` - Listener for backdrop mouse down (should set flag)
+/// * `on_backdrop_mouse_up` - Listener for backdrop mouse up (should check flag and close)
+/// * `child` - The modal content element
+pub fn render_modal_backdrop(
+    id: impl Into<ElementId>,
+    opacity: f32,
+    cx: &mut Context<Humanboard>,
+    on_backdrop_mouse_down: impl Fn(&mut Humanboard, &MouseDownEvent, &mut Window, &mut Context<Humanboard>) + 'static,
+    on_backdrop_mouse_up: impl Fn(&mut Humanboard, &MouseUpEvent, &mut Window, &mut Context<Humanboard>) + 'static,
+    child: impl IntoElement,
+) -> impl IntoElement {
+    deferred(
+        div()
+            .id(id)
+            .absolute()
+            .top_0()
+            .left_0()
+            .size_full()
+            .bg(hsla(0.0, 0.0, 0.0, MODAL_BACKDROP_OPACITY * opacity))
+            .flex()
+            .items_center()
+            .justify_center()
+            .on_mouse_down(MouseButton::Left, cx.listener(on_backdrop_mouse_down))
+            .on_mouse_up(MouseButton::Left, cx.listener(on_backdrop_mouse_up))
+            .on_scroll_wheel(cx.listener(|_, _, _, _| {}))
+            .child(child),
+    )
+    .with_priority(1500)
+}
+
+/// Adds mouse event handlers to prevent backdrop close when clicking on modal content.
+///
+/// This overload works with `Stateful<Div>` (returned by `.track_focus()`).
+///
+/// # Arguments
+/// * `div` - The Stateful div element to add handlers to
+/// * `cx` - GPUI context
+/// * `on_mouse_down` - Listener for mouse down on modal content
+/// * `on_mouse_up` - Listener for mouse up on modal content
+pub fn modal_intercept_backdrop_clicks_stateful(
+    div: Stateful<Div>,
+    cx: &mut Context<Humanboard>,
+    on_mouse_down: impl Fn(&mut Humanboard, &MouseDownEvent, &mut Window, &mut Context<Humanboard>) + 'static,
+    on_mouse_up: impl Fn(&mut Humanboard, &MouseUpEvent, &mut Window, &mut Context<Humanboard>) + 'static,
+) -> Stateful<Div> {
+    div.on_mouse_down(MouseButton::Left, cx.listener(on_mouse_down))
+        .on_mouse_up(MouseButton::Left, cx.listener(on_mouse_up))
+}
+
+// ============================================================================
+// Legacy Helpers (for backward compatibility)
+// ============================================================================
 
 /// Render a keyboard key badge
 pub fn render_kbd(key: &str, cx: &Context<Humanboard>) -> Div {

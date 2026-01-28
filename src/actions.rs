@@ -105,7 +105,7 @@ impl Humanboard {
         let bounds = window.bounds();
         let window_size = bounds.size;
 
-        if let Some(ref preview) = self.preview {
+        if let Some(ref preview) = self.preview.panel {
             match preview.split {
                 crate::app::SplitDirection::Vertical => {
                     let canvas_width = f32::from(window_size.width) * (1.0 - preview.size);
@@ -132,7 +132,7 @@ impl Humanboard {
 
     pub fn zoom_in(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let center = self.canvas_center(window);
-        if let Some(ref mut board) = self.board {
+        if let Some(ref mut board) = self.canvas.board {
             if board.zoom_in(center) {
                 cx.notify();
             }
@@ -141,7 +141,7 @@ impl Humanboard {
 
     pub fn zoom_out(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let center = self.canvas_center(window);
-        if let Some(ref mut board) = self.board {
+        if let Some(ref mut board) = self.canvas.board {
             if board.zoom_out(center) {
                 cx.notify();
             }
@@ -149,16 +149,16 @@ impl Humanboard {
     }
 
     pub fn zoom_reset(&mut self, cx: &mut Context<Self>) {
-        if let Some(ref mut board) = self.board {
+        if let Some(ref mut board) = self.canvas.board {
             board.zoom_reset();
             cx.notify();
         }
     }
 
     pub fn delete_selected(&mut self, cx: &mut Context<Self>) {
-        if !self.selected_items.is_empty() {
-            if let Some(ref mut board) = self.board {
-                let selected = self.selected_items.clone();
+        if !self.canvas.selected_items.is_empty() {
+            if let Some(ref mut board) = self.canvas.board {
+                let selected = self.canvas.selected_items.clone();
 
                 // Collect paths of items being deleted (for closing preview tabs)
                 let deleted_paths: Vec<_> = board
@@ -190,7 +190,7 @@ impl Humanboard {
                     .iter()
                     .filter_map(|item| {
                         if let crate::types::ItemContent::Chart { source_item_id: Some(source_id), .. } = &item.content {
-                            if selected.contains(source_id) {
+                            if selected.contains(&source_id) {
                                 return Some(item.id);
                             }
                         }
@@ -199,7 +199,7 @@ impl Humanboard {
                     .collect();
 
                 // Close preview tabs for deleted items
-                if let Some(ref mut preview) = self.preview {
+                if let Some(ref mut preview) = self.preview.panel {
                     let mut tabs_to_remove: Vec<usize> = Vec::new();
                     for (i, tab) in preview.tabs.iter().enumerate() {
                         // Check file-based tabs (PDF, Markdown, Code)
@@ -225,7 +225,7 @@ impl Humanboard {
                     if preview.tabs.is_empty() {
                         // Clean up remaining resources and close preview panel
                         preview.cleanup(cx);
-                        self.preview = None;
+                        self.preview.panel = None;
                     } else if preview.active_tab >= preview.tabs.len() {
                         preview.active_tab = preview.tabs.len() - 1;
                     }
@@ -236,7 +236,7 @@ impl Humanboard {
                 ids_to_remove.extend(orphan_charts);
 
                 board.remove_items(&ids_to_remove);
-                self.selected_items.clear();
+                self.canvas.selected_items.clear();
                 board.push_history();
                 board.save();
                 cx.notify();
@@ -245,12 +245,12 @@ impl Humanboard {
     }
 
     pub fn duplicate_selected(&mut self, cx: &mut Context<Self>) {
-        if !self.selected_items.is_empty() {
-            if let Some(ref mut board) = self.board {
+        if !self.canvas.selected_items.is_empty() {
+            if let Some(ref mut board) = self.canvas.board {
                 let mut new_ids = Vec::new();
 
                 // Collect items to duplicate
-                let items_to_dup: Vec<_> = self
+                let items_to_dup: Vec<_> = self.canvas
                     .selected_items
                     .iter()
                     .filter_map(|id| board.get_item(*id).cloned())
@@ -272,9 +272,9 @@ impl Humanboard {
                 }
 
                 // Select the new items
-                self.selected_items.clear();
+                self.canvas.selected_items.clear();
                 for id in new_ids {
-                    self.selected_items.insert(id);
+                    self.canvas.selected_items.insert(id);
                 }
 
                 // Save changes
@@ -286,10 +286,10 @@ impl Humanboard {
     }
 
     pub fn select_all(&mut self, cx: &mut Context<Self>) {
-        if let Some(ref board) = self.board {
-            self.selected_items.clear();
+        if let Some(ref board) = self.canvas.board {
+            self.canvas.selected_items.clear();
             for item in &board.items {
-                self.selected_items.insert(item.id);
+                self.canvas.selected_items.insert(item.id);
             }
             cx.notify();
         }
@@ -297,8 +297,8 @@ impl Humanboard {
 
     /// Deselect all selected items
     pub fn deselect_all(&mut self, cx: &mut Context<Self>) {
-        if !self.selected_items.is_empty() {
-            self.selected_items.clear();
+        if !self.canvas.selected_items.is_empty() {
+            self.canvas.selected_items.clear();
             cx.notify();
         }
     }
@@ -309,16 +309,16 @@ impl Humanboard {
     pub fn copy_selected(&mut self, cx: &mut Context<Self>) {
         use crate::notifications::Toast;
 
-        if self.selected_items.is_empty() {
+        if self.canvas.selected_items.is_empty() {
             return;
         }
 
-        if self.board.is_some() {
+        if self.canvas.board.is_some() {
             // Store copied items in a Vec for later paste
             // For now, we'll just show a toast - full implementation would
             // serialize to clipboard
-            let count = self.selected_items.len();
-            self.toast_manager.push(Toast::success(format!(
+            let count = self.canvas.selected_items.len();
+            self.ui.toast_manager.push(Toast::success(format!(
                 "Copied {} item{}",
                 count,
                 if count == 1 { "" } else { "s" }
@@ -329,12 +329,12 @@ impl Humanboard {
 
     /// Nudge selected items by a given delta
     fn nudge_selected(&mut self, dx: f32, dy: f32, cx: &mut Context<Self>) {
-        if self.selected_items.is_empty() {
+        if self.canvas.selected_items.is_empty() {
             return;
         }
-        if let Some(ref mut board) = self.board {
+        if let Some(ref mut board) = self.canvas.board {
             for item in &mut board.items {
-                if self.selected_items.contains(&item.id) {
+                if self.canvas.selected_items.contains(&item.id) {
                     item.position.0 += dx;
                     item.position.1 += dy;
                 }
@@ -362,7 +362,7 @@ impl Humanboard {
     }
 
     pub fn toggle_command_palette(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.command_palette.is_some() {
+        if self.ui.command_palette.is_some() {
             self.hide_command_palette(window, cx);
         } else {
             self.show_command_palette(window, cx);
@@ -370,24 +370,24 @@ impl Humanboard {
     }
 
     pub fn close_command_palette(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.command_palette.is_some() {
+        if self.ui.command_palette.is_some() {
             self.hide_command_palette(window, cx);
         }
     }
 
     pub fn undo(&mut self, cx: &mut Context<Self>) {
-        if let Some(ref mut board) = self.board {
+        if let Some(ref mut board) = self.canvas.board {
             if board.undo() {
-                self.selected_items.clear();
+                self.canvas.selected_items.clear();
                 cx.notify();
             }
         }
     }
 
     pub fn redo(&mut self, cx: &mut Context<Self>) {
-        if let Some(ref mut board) = self.board {
+        if let Some(ref mut board) = self.canvas.board {
             if board.redo() {
-                self.selected_items.clear();
+                self.canvas.selected_items.clear();
                 cx.notify();
             }
         }
@@ -422,6 +422,6 @@ impl Humanboard {
             .detach();
 
         // Store the receiver - we'll poll it in the render cycle
-        self.file_drop_rx = Some(rx);
+        self.canvas.file_drop_rx = Some(rx);
     }
 }

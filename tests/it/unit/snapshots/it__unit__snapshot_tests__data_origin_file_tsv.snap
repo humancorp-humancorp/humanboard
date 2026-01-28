@@ -1,0 +1,11 @@
+---
+source: tests/it/unit/snapshot_tests.rs
+assertion_line: 413
+expression: origin
+---
+{
+  "File": {
+    "path": "/data/file.tsv",
+    "delimiter": "\t"
+  }
+}

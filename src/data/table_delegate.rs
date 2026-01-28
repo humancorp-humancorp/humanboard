@@ -285,6 +285,8 @@ impl TableDelegate for DataSourceDelegate {
     }
 
     fn column(&self, col_ix: usize, _cx: &App) -> &Column {
+        // Bounds checking: clamp index to prevent panics
+        let col_ix = col_ix.min(self.columns.len().saturating_sub(1));
         &self.columns[col_ix]
     }
 
@@ -366,13 +368,13 @@ impl TableDelegate for DataSourceDelegate {
             .overflow_x_hidden()
             .text_ellipsis()
             .hover(|s| s.bg(selection_bg.opacity(0.3)))
-            .on_mouse_down(MouseButton::Left, cx.listener(move |state, event: &MouseDownEvent, window, cx| {
-                if event.click_count == 2 {
-                    // Double-click: start editing
-                    state.delegate_mut().start_editing(row_ix, col_ix, window, cx);
-                    cx.notify();
-                }
-            }))
+            // NOTE: Cell editing disabled - feature had focus/sync issues
+            // .on_mouse_down(MouseButton::Left, cx.listener(move |state, event: &MouseDownEvent, window, cx| {
+            //     if event.click_count == 2 {
+            //         state.delegate_mut().start_editing(row_ix, col_ix, window, cx);
+            //         cx.notify();
+            //     }
+            // }))
             .child(display_value)
             .into_any_element()
     }

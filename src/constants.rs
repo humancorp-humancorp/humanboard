@@ -96,6 +96,9 @@ pub const MAX_PREVIEW_SIZE: f32 = 0.8;
 /// Default text color (white)
 pub const DEFAULT_TEXT_COLOR: &str = "#ffffff";
 
+/// Default font family for code blocks and inline code
+pub const DEFAULT_CODE_FONT: &str = "Iosevka Nerd Font";
+
 /// Default arrow color (white)
 pub const DEFAULT_ARROW_COLOR: &str = "#ffffff";
 
@@ -189,3 +192,57 @@ pub const BUTTON_HEIGHT_SM: f32 = 28.0;
 pub const BUTTON_HEIGHT_MD: f32 = 32.0;
 /// Button height - Large
 pub const BUTTON_HEIGHT_LG: f32 = 40.0;
+
+// ============================================================================
+// Modal Dimensions
+// ============================================================================
+
+/// Modal width - Small (compact dialogs)
+pub const MODAL_WIDTH_SM: f32 = 420.0;
+/// Modal width - Medium (standard dialogs)
+pub const MODAL_WIDTH_MD: f32 = 480.0;
+/// Modal width - Large (complex modals like settings)
+pub const MODAL_WIDTH_LG: f32 = 680.0;
+
+/// Modal height - Small (compact dialogs)
+pub const MODAL_HEIGHT_SM: f32 = 320.0;
+/// Modal height - Medium (standard dialogs)
+pub const MODAL_HEIGHT_MD: f32 = 480.0;
+
+/// Backdrop opacity for modal overlays
+pub const MODAL_BACKDROP_OPACITY: f32 = 0.6;
+
+// ============================================================================
+// Input Handling
+// ============================================================================
+
+/// Minimum size for marquee selection to trigger (prevents accidental selection)
+pub const MIN_MARQUEE_SIZE: f32 = 5.0;
+
+/// Minimum drag distance to create a drawn item (prevents accidental creation)
+pub const MIN_DRAW_DISTANCE: f32 = 10.0;
+
+/// Size of the resize corner area in pixels (at zoom 1.0)
+pub const RESIZE_CORNER_SIZE: f32 = 30.0;
+
+/// Minimum hit area for shape borders in pixels (at zoom 1.0)
+pub const MIN_SHAPE_HIT_AREA: f32 = 8.0;
+
+/// Minimum item size for resize operations
+pub const MIN_ITEM_SIZE: f32 = 50.0;
+
+/// Minimum arrow size when drawing
+pub const MIN_ARROW_SIZE: f32 = 20.0;
+
+/// Resize corner tolerance in pixels
+pub const RESIZE_CORNER_TOLERANCE: f32 = 5.0;
+
+// ============================================================================
+// Data Loading
+// ============================================================================
+
+/// Maximum number of CSV rows to load
+pub const MAX_CSV_ROWS: usize = 100_000;
+
+/// Maximum CSV file size in MB
+pub const MAX_CSV_SIZE_MB: usize = 100;

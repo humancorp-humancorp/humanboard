@@ -90,7 +90,7 @@ impl Humanboard {
             }
         };
 
-        if let Some(ref mut preview) = self.preview {
+        if let Some(ref mut preview) = self.preview.panel {
             // Check if file is already open in left pane
             if let Some(index) = preview.tabs.iter().position(|t| t.path() == Some(&path)) {
                 // File already open - just switch to it and make permanent if not preview mode
@@ -134,7 +134,7 @@ impl Humanboard {
             // Create new preview panel with first tab
             let mut panel = PreviewPanel::new(SplitDirection::Vertical, 0.4);
             panel.tabs.push(tab);
-            self.preview = Some(panel);
+            self.preview.panel = Some(panel);
         }
         cx.notify();
     }
@@ -143,7 +143,7 @@ impl Humanboard {
     /// Returns a list of error messages for any webviews that failed to create.
     pub fn ensure_pdf_webview(&mut self, window: &mut Window, cx: &mut App) -> Vec<String> {
         let mut errors = Vec::new();
-        if let Some(ref mut preview) = self.preview {
+        if let Some(ref mut preview) = self.preview.panel {
             let active_tab = preview.active_tab;
             let right_active_tab = preview.right_active_tab;
             let is_pane_split = preview.is_pane_split;
@@ -321,7 +321,7 @@ impl Humanboard {
 
     /// Ensure code editors are created for code tabs (for syntax-highlighted viewing)
     pub fn ensure_code_editors(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
-        if let Some(ref mut preview) = self.preview {
+        if let Some(ref mut preview) = self.preview.panel {
             let is_split = preview.is_pane_split;
 
             // Ensure code editors for left pane
@@ -386,7 +386,7 @@ impl Humanboard {
     /// Also syncs dirty changes from preview back to board's data sources
     pub fn ensure_preview_table_states(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         // First, sync any dirty data from existing table states back to board
-        if let Some(ref mut preview) = self.preview {
+        if let Some(ref mut preview) = self.preview.panel {
             let mut dirty_updates: Vec<(u64, crate::types::DataSource)> = Vec::new();
 
             // Check left pane tabs for dirty data
@@ -411,7 +411,7 @@ impl Humanboard {
 
             // Apply dirty updates to board
             if !dirty_updates.is_empty() {
-                if let Some(ref mut board) = self.board {
+                if let Some(ref mut board) = self.canvas.board {
                     for (ds_id, updated_ds) in dirty_updates {
                         board.data_sources.insert(ds_id, updated_ds);
                     }
@@ -422,13 +422,13 @@ impl Humanboard {
         }
 
         // Collect data sources we need for table tabs
-        let data_sources_map = if let Some(ref board) = self.board {
+        let data_sources_map = if let Some(ref board) = self.canvas.board {
             board.data_sources.clone()
         } else {
             return;
         };
 
-        if let Some(ref mut preview) = self.preview {
+        if let Some(ref mut preview) = self.preview.panel {
             let is_split = preview.is_pane_split;
 
             // Ensure table states for left pane
@@ -473,7 +473,7 @@ impl Humanboard {
     }
 
     pub fn toggle_markdown_edit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if let Some(ref mut preview) = self.preview {
+        if let Some(ref mut preview) = self.preview.panel {
             if let Some(tab) = preview.tabs.get_mut(preview.active_tab) {
                 if let PreviewTab::Markdown {
                     editing,
@@ -485,7 +485,7 @@ impl Humanboard {
                     *editing = !*editing;
                     if *editing {
                         // Set focus context to Preview for editor input
-                        self.focus.focus(FocusContext::Preview, window);
+                        self.system.focus.focus(FocusContext::Preview, window);
 
                         if editor.is_none() {
                             // Create editor with current content - use code_editor for multiline support
@@ -506,7 +506,7 @@ impl Humanboard {
                         }
                     } else {
                         // Release focus back to canvas when exiting edit mode
-                        self.focus.release(FocusContext::Preview, window);
+                        self.system.focus.release(FocusContext::Preview, window);
                     }
                 }
             }
@@ -515,7 +515,7 @@ impl Humanboard {
     }
 
     pub fn save_markdown(&mut self, cx: &mut Context<Self>) {
-        if let Some(ref mut preview) = self.preview {
+        if let Some(ref mut preview) = self.preview.panel {
             if let Some(tab) = preview.tabs.get_mut(preview.active_tab) {
                 if let PreviewTab::Markdown {
                     path,
@@ -528,7 +528,7 @@ impl Humanboard {
                     if let Some(ed) = editor {
                         let new_content = ed.read(cx).text().to_string();
                         let _ = std::fs::write(path.as_path(), &new_content);
-                        if let Some(ref mut board) = self.board {
+                        if let Some(ref mut board) = self.canvas.board {
                             for item in board.items.iter_mut() {
                                 if let crate::types::ItemContent::Markdown {
                                     path: item_path,
@@ -552,7 +552,7 @@ impl Humanboard {
     }
 
     pub fn save_code(&mut self, cx: &mut Context<Self>) {
-        if let Some(ref mut preview) = self.preview {
+        if let Some(ref mut preview) = self.preview.panel {
             if let Some(tab) = preview.tabs.get_mut(preview.active_tab) {
                 match tab {
                     PreviewTab::Code {
@@ -576,7 +576,7 @@ impl Humanboard {
                             if let Some(ed) = editor {
                                 let new_content = ed.read(cx).text().to_string();
                                 let _ = std::fs::write(path.as_path(), &new_content);
-                                if let Some(ref mut board) = self.board {
+                                if let Some(ref mut board) = self.canvas.board {
                                     for item in board.items.iter_mut() {
                                         if let crate::types::ItemContent::Markdown {
                                             path: item_path,
@@ -599,7 +599,7 @@ impl Humanboard {
                         // Save the data source to file
                         let ds_id = *data_source_id;
                         let table_name = name.clone();
-                        if let Some(ref mut board) = self.board {
+                        if let Some(ref mut board) = self.canvas.board {
                             match board.save_data_source_to_file(ds_id) {
                                 Ok(_path) => {
                                     // Clear dirty flag on the delegate's data source
@@ -649,7 +649,7 @@ impl Humanboard {
             meta,
         };
 
-        if let Some(ref mut preview) = self.preview {
+        if let Some(ref mut preview) = self.preview.panel {
             // Check if table is already open (by data_source_id)
             if let Some(index) = preview.tabs.iter().position(|t| {
                 matches!(t, PreviewTab::Table { data_source_id: id, .. } if *id == data_source_id)
@@ -677,7 +677,7 @@ impl Humanboard {
             // Create new preview panel with first tab
             let mut panel = PreviewPanel::new(SplitDirection::Vertical, 0.4);
             panel.tabs.push(tab);
-            self.preview = Some(panel);
+            self.preview.panel = Some(panel);
         }
         cx.notify();
     }

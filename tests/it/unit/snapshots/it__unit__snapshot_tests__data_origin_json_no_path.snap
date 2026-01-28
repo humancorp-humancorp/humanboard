@@ -1,0 +1,10 @@
+---
+source: tests/it/unit/snapshot_tests.rs
+assertion_line: 413
+expression: origin
+---
+{
+  "Json": {
+    "path": null
+  }
+}

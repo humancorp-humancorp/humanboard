@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 impl Humanboard {
     pub fn show_command_palette(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         // Set focus context to CommandPalette
-        self.focus.focus(FocusContext::CommandPalette, window);
+        self.system.focus.focus(FocusContext::CommandPalette, window);
 
         let input = cx
             .new(|cx| InputState::new(window, cx).placeholder("Type to search or use commands..."));
@@ -21,7 +21,7 @@ impl Humanboard {
         });
 
         // Start fade-in animation
-        self.modal_animations.open_command_palette();
+        self.ui.modal_animations.open_command_palette();
 
         // Subscribe to input events
         cx.subscribe(
@@ -30,7 +30,7 @@ impl Humanboard {
                 match event {
                     gpui_component::input::InputEvent::PressEnter { .. } => {
                         // Execute the command when Enter is pressed
-                        if this.command_palette.is_some() {
+                        if this.ui.command_palette.is_some() {
                             this.execute_command_from_subscription(cx);
                         }
                     }
@@ -55,7 +55,7 @@ impl Humanboard {
         // Note: Arrow key navigation is handled by on_key_down in render/overlays.rs
         // Do NOT add observe_keystrokes here - it would duplicate the handling
 
-        self.command_palette = Some(input);
+        self.ui.command_palette = Some(input);
 
         // Show all items initially
         self.update_search_results("", cx);
@@ -64,9 +64,9 @@ impl Humanboard {
     /// Hide command palette and release focus (when window is available)
     pub fn hide_command_palette(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         // Start fade-out animation - cleanup happens when animation completes
-        self.modal_animations.close_command_palette();
+        self.ui.modal_animations.close_command_palette();
         // Release focus back to canvas
-        self.focus.release(FocusContext::CommandPalette, window);
+        self.system.focus.release(FocusContext::CommandPalette, window);
         cx.notify();
     }
 
@@ -74,18 +74,18 @@ impl Humanboard {
     /// Used when window is not available (e.g., from Blur callback)
     pub fn clear_command_palette_state(&mut self, cx: &mut Context<Self>) {
         // Start fade-out animation
-        self.modal_animations.close_command_palette();
+        self.ui.modal_animations.close_command_palette();
         // Mark that focus should return to canvas (actual focus happens in render)
-        self.focus.mark_needs_canvas_focus();
+        self.system.focus.mark_needs_canvas_focus();
         cx.notify();
     }
 
     /// Clean up command palette after close animation completes
     pub fn finish_close_command_palette(&mut self) {
-        self.command_palette = None;
-        self.search_results.clear();
-        self.selected_result = 0;
-        self.cmd_palette_mode = CmdPaletteMode::Items;
+        self.ui.command_palette = None;
+        self.ui.search_results.clear();
+        self.ui.selected_result = 0;
+        self.ui.cmd_palette_mode = CmdPaletteMode::Items;
     }
 
     /// Update search results based on input text
@@ -94,30 +94,30 @@ impl Humanboard {
 
         // Check if user typed "theme " to enter theme mode
         if text.starts_with("theme ") {
-            self.cmd_palette_mode = CmdPaletteMode::Themes;
+            self.ui.cmd_palette_mode = CmdPaletteMode::Themes;
             let filter = text.strip_prefix("theme ").unwrap_or("").trim();
             let themes = Settings::available_themes(cx);
             if filter.is_empty() {
-                self.search_results = themes
+                self.ui.search_results = themes
                     .into_iter()
                     .enumerate()
                     .map(|(idx, name)| (idx as u64, name))
                     .collect();
             } else {
-                self.search_results = themes
+                self.ui.search_results = themes
                     .into_iter()
                     .enumerate()
                     .filter(|(_, name)| name.to_lowercase().contains(&filter.to_lowercase()))
                     .map(|(idx, name)| (idx as u64, name))
                     .collect();
             }
-            self.selected_result = 0;
+            self.ui.selected_result = 0;
             cx.notify();
             return;
         }
 
         // Handle theme mode (when entered via click or command selection)
-        if self.cmd_palette_mode == CmdPaletteMode::Themes {
+        if self.ui.cmd_palette_mode == CmdPaletteMode::Themes {
             let themes = Settings::available_themes(cx);
             // If text is just "theme" (entered via command), treat as empty filter
             let filter = if text.eq_ignore_ascii_case("theme") {
@@ -128,21 +128,21 @@ impl Humanboard {
 
             if filter.is_empty() {
                 // Show all themes
-                self.search_results = themes
+                self.ui.search_results = themes
                     .into_iter()
                     .enumerate()
                     .map(|(idx, name)| (idx as u64, name))
                     .collect();
             } else {
                 // Filter themes by search text
-                self.search_results = themes
+                self.ui.search_results = themes
                     .into_iter()
                     .enumerate()
                     .filter(|(_, name)| name.to_lowercase().contains(&filter.to_lowercase()))
                     .map(|(idx, name)| (idx as u64, name))
                     .collect();
             }
-            self.selected_result = 0;
+            self.ui.selected_result = 0;
             cx.notify();
             return;
         }
@@ -163,8 +163,8 @@ impl Humanboard {
                 .collect();
 
             if !matching_commands.is_empty() {
-                self.search_results = matching_commands;
-                self.selected_result = 0;
+                self.ui.search_results = matching_commands;
+                self.ui.selected_result = 0;
                 cx.notify();
                 return;
             }
@@ -172,17 +172,17 @@ impl Humanboard {
 
         // Check if it's a complete command
         if text.starts_with("md ") || text == "md" {
-            self.search_results.clear();
-            self.selected_result = 0;
+            self.ui.search_results.clear();
+            self.ui.selected_result = 0;
             cx.notify();
             return;
         }
 
         // Search canvas items (empty string shows all items)
-        if let Some(ref board) = self.board {
+        if let Some(ref board) = self.canvas.board {
             if text.is_empty() {
                 // Show all searchable items when no search text
-                self.search_results = board
+                self.ui.search_results = board
                     .items
                     .iter()
                     .filter(|item| item.content.is_searchable())
@@ -201,39 +201,39 @@ impl Humanboard {
                     })
                     .collect();
             } else {
-                self.search_results = board.find_items(text);
+                self.ui.search_results = board.find_items(text);
             }
-            self.selected_result = 0;
+            self.ui.selected_result = 0;
         } else {
-            self.search_results.clear();
+            self.ui.search_results.clear();
         }
         cx.notify();
     }
 
     /// Enter theme selection mode in command palette
     pub fn enter_theme_mode(&mut self, cx: &mut Context<Self>) {
-        self.cmd_palette_mode = CmdPaletteMode::Themes;
+        self.ui.cmd_palette_mode = CmdPaletteMode::Themes;
         // Show all themes
         self.update_search_results("", cx);
     }
 
     /// Navigate search results
     pub fn select_next_result(&mut self, cx: &mut Context<Self>) {
-        if !self.search_results.is_empty() {
-            self.selected_result = (self.selected_result + 1) % self.search_results.len();
-            self.cmd_palette_scroll.scroll_to_item(self.selected_result);
+        if !self.ui.search_results.is_empty() {
+            self.ui.selected_result = (self.ui.selected_result + 1) % self.ui.search_results.len();
+            self.ui.cmd_palette_scroll.scroll_to_item(self.ui.selected_result);
             cx.notify();
         }
     }
 
     pub fn select_prev_result(&mut self, cx: &mut Context<Self>) {
-        if !self.search_results.is_empty() {
-            self.selected_result = if self.selected_result == 0 {
-                self.search_results.len() - 1
+        if !self.ui.search_results.is_empty() {
+            self.ui.selected_result = if self.ui.selected_result == 0 {
+                self.ui.search_results.len() - 1
             } else {
-                self.selected_result - 1
+                self.ui.selected_result - 1
             };
-            self.cmd_palette_scroll.scroll_to_item(self.selected_result);
+            self.ui.cmd_palette_scroll.scroll_to_item(self.ui.selected_result);
             cx.notify();
         }
     }
@@ -246,22 +246,22 @@ impl Humanboard {
     /// Called from subscription when Enter is pressed - stores command for deferred execution
     fn execute_command_from_subscription(&mut self, cx: &mut Context<Self>) {
         // Handle theme mode
-        if self.cmd_palette_mode == CmdPaletteMode::Themes {
-            if !self.search_results.is_empty() {
-                let (_, theme_name) = &self.search_results[self.selected_result];
-                self.pending_command = Some(format!("__theme:{}", theme_name));
+        if self.ui.cmd_palette_mode == CmdPaletteMode::Themes {
+            if !self.ui.search_results.is_empty() {
+                let (_, theme_name) = &self.ui.search_results[self.ui.selected_result];
+                self.ui.pending_command = Some(format!("__theme:{}", theme_name));
             }
-            self.command_palette = None;
-            self.search_results.clear();
-            self.selected_result = 0;
-            self.cmd_palette_mode = CmdPaletteMode::Items;
+            self.ui.command_palette = None;
+            self.ui.search_results.clear();
+            self.ui.selected_result = 0;
+            self.ui.cmd_palette_mode = CmdPaletteMode::Items;
             cx.notify();
             return;
         }
 
         // If we have search results selected, check if it's a command or an item
-        if !self.search_results.is_empty() {
-            let (item_id, _) = &self.search_results[self.selected_result];
+        if !self.ui.search_results.is_empty() {
+            let (item_id, _) = &self.ui.search_results[self.ui.selected_result];
 
             // Check for special command IDs (u64::MAX - N for commands)
             const CMD_THEME: u64 = u64::MAX - 1;
@@ -270,43 +270,43 @@ impl Humanboard {
             match *item_id {
                 CMD_THEME => {
                     // Enter theme mode directly
-                    self.cmd_palette_mode = CmdPaletteMode::Themes;
+                    self.ui.cmd_palette_mode = CmdPaletteMode::Themes;
                     let themes = Settings::available_themes(cx);
-                    self.search_results = themes
+                    self.ui.search_results = themes
                         .into_iter()
                         .enumerate()
                         .map(|(idx, name)| (idx as u64, name))
                         .collect();
-                    self.selected_result = 0;
+                    self.ui.selected_result = 0;
                     cx.notify();
                     return; // Don't close palette, stay in theme mode
                 }
                 CMD_MD => {
-                    self.pending_command = Some("md".to_string());
+                    self.ui.pending_command = Some("md".to_string());
                 }
                 _ => {
                     // Regular item - jump to it
-                    self.pending_command = Some(format!("__jump:{}", item_id));
+                    self.ui.pending_command = Some(format!("__jump:{}", item_id));
                 }
             }
         } else {
             let command = self
-                .command_palette
+                .ui.command_palette
                 .as_ref()
                 .map(|input| input.read(cx).text().to_string())
                 .unwrap_or_default();
-            self.pending_command = Some(command);
+            self.ui.pending_command = Some(command);
         }
 
-        self.command_palette = None;
-        self.search_results.clear();
-        self.selected_result = 0;
+        self.ui.command_palette = None;
+        self.ui.search_results.clear();
+        self.ui.selected_result = 0;
         cx.notify();
     }
 
     /// Process any pending command (called from render where we have window access)
     pub fn process_pending_command(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if let Some(command) = self.pending_command.take() {
+        if let Some(command) = self.ui.pending_command.take() {
             let command = command.trim();
 
             // Handle jump command (from search result selection)
@@ -334,7 +334,7 @@ impl Humanboard {
 
     /// Jump to and select an item by ID with smooth animation
     fn jump_to_item(&mut self, item_id: u64, window: &mut Window, cx: &mut Context<Self>) {
-        if let Some(ref board) = self.board {
+        if let Some(ref board) = self.canvas.board {
             if let Some(item) = board.items.iter().find(|i| i.id == item_id) {
                 // Get window size for centering
                 let bounds = window.bounds();
@@ -354,7 +354,7 @@ impl Humanboard {
                 );
 
                 // Start animation from current position to target
-                self.pan_animation = Some(PanAnimation {
+                self.ui.pan_animation = Some(PanAnimation {
                     start_offset: board.canvas_offset,
                     target_offset,
                     start_time: Instant::now(),
@@ -362,8 +362,8 @@ impl Humanboard {
                 });
 
                 // Select the item
-                self.selected_items.clear();
-                self.selected_items.insert(item_id);
+                self.canvas.selected_items.clear();
+                self.canvas.selected_items.insert(item_id);
 
                 // Trigger first frame
                 cx.notify();
@@ -373,14 +373,14 @@ impl Humanboard {
 
     /// Update pan animation, returns true if animation is active
     pub fn update_pan_animation(&mut self) -> bool {
-        if let Some(ref anim) = self.pan_animation {
+        if let Some(ref anim) = self.ui.pan_animation {
             let elapsed = anim.start_time.elapsed();
             let progress = (elapsed.as_secs_f32() / anim.duration.as_secs_f32()).min(1.0);
 
             // Ease out cubic for smooth deceleration
             let eased = 1.0 - (1.0 - progress).powi(3);
 
-            if let Some(ref mut board) = self.board {
+            if let Some(ref mut board) = self.canvas.board {
                 // Interpolate between start and target
                 let start_x = f32::from(anim.start_offset.x);
                 let start_y = f32::from(anim.start_offset.y);
@@ -395,7 +395,7 @@ impl Humanboard {
 
             if progress >= 1.0 {
                 // Animation complete
-                self.pan_animation = None;
+                self.ui.pan_animation = None;
                 return false;
             }
             return true;
@@ -405,12 +405,12 @@ impl Humanboard {
 
     pub fn execute_command(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let command = self
-            .command_palette
+            .ui.command_palette
             .as_ref()
             .map(|input| input.read(cx).text().to_string())
             .unwrap_or_default();
 
-        self.command_palette = None;
+        self.ui.command_palette = None;
 
         // Parse command
         let command = command.trim();
@@ -427,7 +427,7 @@ impl Humanboard {
 
     fn create_markdown_note(&mut self, name: String, window: &mut Window, cx: &mut Context<Self>) {
         // Get board ID from current view
-        let board_id = match &self.view {
+        let board_id = match &self.navigation.view {
             AppView::Board(id) => id.clone(),
             _ => return,
         };
@@ -440,7 +440,7 @@ impl Humanboard {
             name.to_string()
         };
 
-        if let Some(ref mut board) = self.board {
+        if let Some(ref mut board) = self.canvas.board {
             // Create markdown file in the board's files directory
             let files_dir = crate::board_index::BoardIndex::board_files_dir(&board_id);
             let _ = std::fs::create_dir_all(&files_dir);
@@ -505,7 +505,7 @@ impl Humanboard {
                         px(f32::from(bounds.size.width) / 2.0),
                         px(f32::from(bounds.size.height) / 2.0),
                     );
-                    if let Some(ref mut board) = self.board {
+                    if let Some(ref mut board) = self.canvas.board {
                         board.add_url(text, center);
                         cx.notify();
                     }
