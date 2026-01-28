@@ -8,13 +8,13 @@
 // ============================================================================
 
 /// Height of the header bar in pixels
-pub const HEADER_HEIGHT: f32 = 40.0;
+pub const HEADER_HEIGHT: f32 = 48.0;
 
 /// Width of the tool dock (left sidebar) in pixels
-pub const DOCK_WIDTH: f32 = 44.0;
+pub const DOCK_WIDTH: f32 = 56.0;
 
 /// Height of the footer bar in pixels
-pub const FOOTER_HEIGHT: f32 = 28.0;
+pub const FOOTER_HEIGHT: f32 = 36.0;
 
 /// Width of the preview splitter drag handle in pixels
 pub const SPLITTER_WIDTH: f32 = 16.0;

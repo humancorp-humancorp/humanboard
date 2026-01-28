@@ -29,10 +29,10 @@ fn render_tool_button(
 
     div()
         .id(ElementId::Name(format!("tool-{:?}", tool).into()))
-        .w(px(32.0))
-        .h(px(32.0))
-        .my(px(2.0))
-        .rounded(px(6.0))
+        .w(px(40.0))
+        .h(px(40.0))
+        .my(px(3.0))
+        .rounded(px(8.0))
         .bg(bg)
         .hover(|s| s.bg(if selected { bg } else { hover_bg }))
         // Focus ring for keyboard navigation (WCAG compliance)
@@ -43,7 +43,7 @@ fn render_tool_button(
         .justify_center()
         .child(
             div()
-                .text_size(px(13.0))
+                .text_size(px(16.0))
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(fg)
                 .child(label),
@@ -63,10 +63,8 @@ where
     let on_select2 = on_select.clone();
     let on_select3 = on_select.clone();
     let on_select4 = on_select.clone();
-    let on_select5 = on_select.clone();
 
     let border_color = cx.theme().border;
-    let divider_color = cx.theme().muted;
 
     div()
         .id("tool-dock")
@@ -75,8 +73,8 @@ where
         .flex()
         .flex_col()
         .items_center()
-        .py(px(8.0))
-        .gap(px(4.0))
+        .py(px(16.0))
+        .gap(px(6.0))
         .border_r_1()
         .border_color(border_color)
         // Selection tool
@@ -108,19 +106,5 @@ where
                     on_select4(this, ToolType::Shape, window, cx);
                 })),
         )
-        // Divider for data visualization tools
-        .child(
-            div()
-                .w(px(24.0))
-                .h(px(1.0))
-                .my(px(4.0))
-                .bg(divider_color)
-        )
-        // Table tool
-        .child(
-            render_tool_button(ToolType::Table, selected_tool == ToolType::Table, "▦", cx)
-                .on_click(cx.listener(move |this, _, window, cx| {
-                    on_select5(this, ToolType::Table, window, cx);
-                })),
-        )
+
 }
