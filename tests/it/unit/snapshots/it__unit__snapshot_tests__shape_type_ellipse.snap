@@ -1,0 +1,6 @@
+---
+source: tests/it/unit/snapshot_tests.rs
+assertion_line: 273
+expression: shape
+---
+"Ellipse"

@@ -1,0 +1,11 @@
+---
+source: tests/it/unit/snapshot_tests.rs
+assertion_line: 413
+expression: origin
+---
+{
+  "Api": {
+    "url": "https://api.example.com/data",
+    "last_fetched": 1704067200
+  }
+}

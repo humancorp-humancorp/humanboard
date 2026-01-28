@@ -12,10 +12,12 @@
 
 mod audio;
 mod pdf;
+mod range_utils;
 mod video;
 mod youtube;
 
 pub use audio::AudioWebView;
 pub use pdf::PdfWebView;
+pub use range_utils::*;
 pub use video::VideoWebView;
 pub use youtube::YouTubeWebView;

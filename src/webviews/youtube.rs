@@ -19,7 +19,9 @@ use gpui::*;
 use gpui_component::webview::WebView;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
+use std::sync::mpsc;
 use std::thread::{self, JoinHandle};
+use std::time::Duration;
 use tiny_http::{Response, Server};
 use tracing::error;
 use wry::WebViewBuilder;
@@ -38,7 +40,7 @@ pub struct YouTubeWebView {
     video_id: String,
     port: u16,
     shutdown_flag: Arc<AtomicBool>,
-    _server_thread: Option<JoinHandle<()>>,
+    server_thread: Option<JoinHandle<()>>,
 }
 
 impl YouTubeWebView {
@@ -50,13 +52,20 @@ impl YouTubeWebView {
         let shutdown_flag = Arc::new(AtomicBool::new(false));
         let shutdown_flag_clone = shutdown_flag.clone();
 
+        // Channel for server startup synchronization
+        let (tx, rx) = mpsc::channel();
+
         // Start a local HTTP server in a background thread
         let server_thread = thread::spawn(move || {
             let addr = format!("127.0.0.1:{}", port);
             let server = match Server::http(&addr) {
-                Ok(s) => s,
+                Ok(s) => {
+                    let _ = tx.send(Ok(()));
+                    s
+                }
                 Err(e) => {
                     error!("Failed to start YouTube embed server on port {}: {}", port, e);
+                    let _ = tx.send(Err(e.to_string()));
                     return;
                 }
             };
@@ -118,8 +127,12 @@ impl YouTubeWebView {
             }
         });
 
-        // Give the server a moment to start
-        std::thread::sleep(std::time::Duration::from_millis(50));
+        // Wait for server to start with timeout
+        match rx.recv_timeout(Duration::from_secs(5)) {
+            Ok(Ok(())) => {}
+            Ok(Err(e)) => return Err(format!("Failed to start server: {}", e)),
+            Err(_) => return Err("Server startup timeout".to_string()),
+        }
 
         // URL to our local server
         let url = format!("http://127.0.0.1:{}/", port);
@@ -151,7 +164,7 @@ impl YouTubeWebView {
             video_id,
             port,
             shutdown_flag,
-            _server_thread: Some(server_thread),
+            server_thread: Some(server_thread),
         })
     }
 
@@ -172,7 +185,7 @@ impl YouTubeWebView {
 
     /// Shutdown the HTTP server
     pub fn shutdown(&self) {
-        self.shutdown_flag.store(true, Ordering::Relaxed);
+        self.shutdown_flag.store(true, Ordering::SeqCst);
     }
 
     /// Hide the webview (should be called before dropping to prevent orphaned UI)
@@ -183,9 +196,10 @@ impl YouTubeWebView {
 
 impl Drop for YouTubeWebView {
     fn drop(&mut self) {
-        // Signal server to shutdown
-        self.shutdown_flag.store(true, Ordering::Relaxed);
-        // Note: We don't join the thread here to avoid blocking
-        // The thread will exit on its own within 100ms
+        // Signal server to shutdown and join the thread
+        self.shutdown_flag.store(true, Ordering::SeqCst);
+        if let Some(handle) = self.server_thread.take() {
+            let _ = handle.join();
+        }
     }
 }

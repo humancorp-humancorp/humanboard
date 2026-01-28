@@ -257,7 +257,7 @@ pub fn render_footer_bar(
                         .cursor_pointer()
                         .hover(|s| s.bg(muted))
                         .on_click(cx.listener(|this, _, _, cx| {
-                            this.show_shortcuts = !this.show_shortcuts;
+                            this.ui.show_shortcuts = !this.ui.show_shortcuts;
                             cx.notify();
                         }))
                         .child(

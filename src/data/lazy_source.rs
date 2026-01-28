@@ -10,6 +10,7 @@
 //! - **Chunk Caching**: Recently accessed chunks are cached for smooth scrolling
 //! - **Streaming**: Large files are streamed rather than loaded into memory
 
+use crate::data::error::DataResult;
 use crate::types::{DataCell, DataColumn, DataOrigin, DataRow, DataSource, DataType};
 use parking_lot::RwLock;
 use polars::prelude::*;
@@ -141,7 +142,7 @@ pub struct LazyDataSource {
 
 impl LazyDataSource {
     /// Load a CSV file lazily
-    pub fn from_csv(id: u64, path: &PathBuf) -> Result<Self, PolarsError> {
+    pub fn from_csv(id: u64, path: &PathBuf) -> DataResult<Self> {
         let start = std::time::Instant::now();
 
         // Detect separator
@@ -203,7 +204,7 @@ impl LazyDataSource {
     }
 
     /// Load a JSON file
-    pub fn from_json(id: u64, path: &PathBuf) -> Result<Self, PolarsError> {
+    pub fn from_json(id: u64, path: &PathBuf) -> DataResult<Self> {
         let start = std::time::Instant::now();
 
         let file = std::fs::File::open(path)?;
@@ -489,7 +490,7 @@ mod tests {
         assert!(end <= 30); // visible + buffer
 
         // Scroll down
-        state.scroll_to(280.0, 1000); // 10 rows down
+        state.scroll_to(350.0, 1000); // ~12.5 rows down (past buffer)
         let (start, end) = state.visible_rows(1000);
         assert!(start > 0);
         assert!(end > 20);

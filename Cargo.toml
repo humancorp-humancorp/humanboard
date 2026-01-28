@@ -29,6 +29,7 @@ sha2 = "0.10"
 urlencoding = "2.1"
 open = "5.0"
 lofty = "0.18"
+uuid = { version = "1.0", features = ["v4"] }
 
 # Error handling and logging (Zed patterns)
 anyhow = "1.0"

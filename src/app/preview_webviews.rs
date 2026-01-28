@@ -16,13 +16,13 @@ use tracing::error;
 impl Humanboard {
     /// Calculate viewport bounds in canvas coordinates
     fn get_viewport_bounds(&self, window: &Window) -> Option<(f32, f32, f32, f32)> {
-        let board = self.board.as_ref()?;
+        let board = self.canvas.board.as_ref()?;
         let bounds = window.bounds();
         let window_width = f32::from(bounds.size.width);
         let window_height = f32::from(bounds.size.height);
 
         // Account for preview panel
-        let (canvas_width, canvas_height) = if let Some(ref preview) = self.preview {
+        let (canvas_width, canvas_height) = if let Some(ref preview) = self.preview.panel {
             match preview.split {
                 SplitDirection::Vertical => ((1.0 - preview.size) * window_width, window_height),
                 SplitDirection::Horizontal => (window_width, (1.0 - preview.size) * window_height),
@@ -70,9 +70,9 @@ impl Humanboard {
         use crate::types::ItemContent;
         let mut errors = Vec::new();
 
-        let Some(ref board) = self.board else {
-            self.youtube_webviews.clear();
-            self.webview_out_of_range_since.clear();
+        let Some(ref board) = self.canvas.board else {
+            self.webviews.youtube.clear();
+            self.webviews.out_of_range_since.clear();
             return errors;
         };
 
@@ -102,12 +102,12 @@ impl Humanboard {
 
             if distance <= WEBVIEW_PRELOAD_DISTANCE {
                 // Clear out-of-range tracking since item is now in range
-                self.webview_out_of_range_since.remove(item_id);
+                self.webviews.out_of_range_since.remove(item_id);
 
-                if !self.youtube_webviews.contains_key(item_id) {
+                if !self.webviews.youtube.contains_key(item_id) {
                     match YouTubeWebView::new(video_id.clone(), window, cx) {
                         Ok(webview) => {
-                            self.youtube_webviews.insert(*item_id, webview);
+                            self.webviews.youtube.insert(*item_id, webview);
                         }
                         Err(e) => {
                             errors.push(format!("Failed to load YouTube video: {}", e));
@@ -123,7 +123,8 @@ impl Humanboard {
             youtube_items.iter().map(|(id, _, _, _)| *id).collect();
 
         let ids_to_remove: Vec<u64> = self
-            .youtube_webviews
+            .webviews
+            .youtube
             .keys()
             .filter(|id| {
                 // Always remove if item was deleted
@@ -137,7 +138,7 @@ impl Humanboard {
                         let distance = Self::item_distance_to_viewport(*pos, *size, vp);
                         if distance > WEBVIEW_UNLOAD_DISTANCE {
                             // Track when item went out of range
-                            let out_since = self.webview_out_of_range_since
+                            let out_since = self.webviews.out_of_range_since
                                 .entry(**id)
                                 .or_insert(now);
                             // Only remove if out of range for long enough
@@ -151,10 +152,10 @@ impl Humanboard {
             .collect();
 
         for id in ids_to_remove {
-            if let Some(webview) = self.youtube_webviews.remove(&id) {
+            if let Some(webview) = self.webviews.youtube.remove(&id) {
                 webview.hide(cx);
             }
-            self.webview_out_of_range_since.remove(&id);
+            self.webviews.out_of_range_since.remove(&id);
         }
 
         errors
@@ -166,8 +167,8 @@ impl Humanboard {
         use crate::types::ItemContent;
         let mut errors = Vec::new();
 
-        let Some(ref board) = self.board else {
-            self.audio_webviews.clear();
+        let Some(ref board) = self.canvas.board else {
+            self.webviews.audio.clear();
             return errors;
         };
 
@@ -195,12 +196,12 @@ impl Humanboard {
                 .unwrap_or(0.0);
 
             if distance <= WEBVIEW_PRELOAD_DISTANCE {
-                self.webview_out_of_range_since.remove(item_id);
+                self.webviews.out_of_range_since.remove(item_id);
 
-                if !self.audio_webviews.contains_key(item_id) {
+                if !self.webviews.audio.contains_key(item_id) {
                     match AudioWebView::new(path.clone(), window, cx) {
                         Ok(webview) => {
-                            self.audio_webviews.insert(*item_id, webview);
+                            self.webviews.audio.insert(*item_id, webview);
                         }
                         Err(e) => {
                             let filename = path.file_name()
@@ -218,7 +219,8 @@ impl Humanboard {
         let audio_ids: std::collections::HashSet<u64> =
             audio_items.iter().map(|(id, _, _, _)| *id).collect();
         let ids_to_remove: Vec<u64> = self
-            .audio_webviews
+            .webviews
+            .audio
             .keys()
             .filter(|id| {
                 if !audio_ids.contains(id) {
@@ -228,7 +230,7 @@ impl Humanboard {
                     if let Some((_, _, pos, size)) = audio_items.iter().find(|(i, _, _, _)| i == *id) {
                         let distance = Self::item_distance_to_viewport(*pos, *size, vp);
                         if distance > WEBVIEW_UNLOAD_DISTANCE {
-                            let out_since = self.webview_out_of_range_since.entry(**id).or_insert(now);
+                            let out_since = self.webviews.out_of_range_since.entry(**id).or_insert(now);
                             return now.duration_since(*out_since) >= unload_delay;
                         }
                     }
@@ -239,10 +241,10 @@ impl Humanboard {
             .collect();
 
         for id in ids_to_remove {
-            if let Some(webview) = self.audio_webviews.remove(&id) {
+            if let Some(webview) = self.webviews.audio.remove(&id) {
                 webview.hide(cx);
             }
-            self.webview_out_of_range_since.remove(&id);
+            self.webviews.out_of_range_since.remove(&id);
         }
         errors
     }
@@ -253,8 +255,8 @@ impl Humanboard {
         use crate::types::ItemContent;
         let mut errors = Vec::new();
 
-        let Some(ref board) = self.board else {
-            self.video_webviews.clear();
+        let Some(ref board) = self.canvas.board else {
+            self.webviews.video.clear();
             return errors;
         };
 
@@ -282,12 +284,12 @@ impl Humanboard {
                 .unwrap_or(0.0);
 
             if distance <= WEBVIEW_PRELOAD_DISTANCE {
-                self.webview_out_of_range_since.remove(item_id);
+                self.webviews.out_of_range_since.remove(item_id);
 
-                if !self.video_webviews.contains_key(item_id) {
+                if !self.webviews.video.contains_key(item_id) {
                     match VideoWebView::new(path.clone(), window, cx) {
                         Ok(webview) => {
-                            self.video_webviews.insert(*item_id, webview);
+                            self.webviews.video.insert(*item_id, webview);
                         }
                         Err(e) => {
                             let filename = path.file_name()
@@ -305,7 +307,8 @@ impl Humanboard {
         let video_ids: std::collections::HashSet<u64> =
             video_items.iter().map(|(id, _, _, _)| *id).collect();
         let ids_to_remove: Vec<u64> = self
-            .video_webviews
+            .webviews
+            .video
             .keys()
             .filter(|id| {
                 if !video_ids.contains(id) {
@@ -315,7 +318,7 @@ impl Humanboard {
                     if let Some((_, _, pos, size)) = video_items.iter().find(|(i, _, _, _)| i == *id) {
                         let distance = Self::item_distance_to_viewport(*pos, *size, vp);
                         if distance > WEBVIEW_UNLOAD_DISTANCE {
-                            let out_since = self.webview_out_of_range_since.entry(**id).or_insert(now);
+                            let out_since = self.webviews.out_of_range_since.entry(**id).or_insert(now);
                             return now.duration_since(*out_since) >= unload_delay;
                         }
                     }
@@ -326,10 +329,10 @@ impl Humanboard {
             .collect();
 
         for id in ids_to_remove {
-            if let Some(webview) = self.video_webviews.remove(&id) {
+            if let Some(webview) = self.webviews.video.remove(&id) {
                 webview.hide(cx);
             }
-            self.webview_out_of_range_since.remove(&id);
+            self.webviews.out_of_range_since.remove(&id);
         }
         errors
     }
@@ -337,21 +340,21 @@ impl Humanboard {
     /// Update webview visibility based on canvas viewport
     /// Hides webviews that are scrolled out of view to prevent z-index issues
     pub fn update_webview_visibility(&mut self, window: &mut Window, cx: &mut App) {
-        let Some(ref board) = self.board else { return };
+        let Some(ref board) = self.canvas.board else { return };
 
         // Hide all webviews when settings modal or shortcuts overlay is open
-        if self.show_settings || self.show_shortcuts {
-            for (_, webview) in &self.youtube_webviews {
+        if self.settings.show || self.ui.show_shortcuts {
+            for (_, webview) in &self.webviews.youtube {
                 webview.webview().update(cx, |wv, _| wv.hide());
             }
-            for (_, webview) in &self.audio_webviews {
+            for (_, webview) in &self.webviews.audio {
                 webview.webview_entity.update(cx, |wv, _| wv.hide());
             }
-            for (_, webview) in &self.video_webviews {
+            for (_, webview) in &self.webviews.video {
                 webview.webview_entity.update(cx, |wv, _| wv.hide());
             }
             // Also hide PDF webviews in preview panel
-            if let Some(ref preview) = self.preview {
+            if let Some(ref preview) = self.preview.panel {
                 for tab in &preview.tabs {
                     if let PreviewTab::Pdf {
                         webview: Some(wv), ..
@@ -369,7 +372,7 @@ impl Humanboard {
         let window_height = f32::from(bounds.size.height);
 
         // Account for preview panel if open
-        let (canvas_width, canvas_height) = if let Some(ref preview) = self.preview {
+        let (canvas_width, canvas_height) = if let Some(ref preview) = self.preview.panel {
             match preview.split {
                 SplitDirection::Vertical => ((1.0 - preview.size) * window_width, window_height),
                 SplitDirection::Horizontal => (window_width, (1.0 - preview.size) * window_height),
@@ -407,7 +410,7 @@ impl Humanboard {
                 !overlaps_header && !overlaps_footer && !overlaps_left && !overlaps_right;
 
             // Update YouTube webview visibility
-            if let Some(webview) = self.youtube_webviews.get(&item.id) {
+            if let Some(webview) = self.webviews.youtube.get(&item.id) {
                 webview.webview().update(cx, |wv, _| {
                     if is_visible {
                         wv.show();
@@ -418,7 +421,7 @@ impl Humanboard {
             }
 
             // Update Audio webview visibility
-            if let Some(webview) = self.audio_webviews.get(&item.id) {
+            if let Some(webview) = self.webviews.audio.get(&item.id) {
                 webview.webview_entity.update(cx, |wv, _| {
                     if is_visible {
                         wv.show();
@@ -429,7 +432,7 @@ impl Humanboard {
             }
 
             // Update Video webview visibility
-            if let Some(webview) = self.video_webviews.get(&item.id) {
+            if let Some(webview) = self.webviews.video.get(&item.id) {
                 webview.webview_entity.update(cx, |wv, _| {
                     if is_visible {
                         wv.show();
@@ -441,7 +444,7 @@ impl Humanboard {
         }
 
         // Show PDF webviews in preview panel (active tab only)
-        if let Some(ref preview) = self.preview {
+        if let Some(ref preview) = self.preview.panel {
             for (idx, tab) in preview.tabs.iter().enumerate() {
                 if let PreviewTab::Pdf {
                     webview: Some(wv), ..

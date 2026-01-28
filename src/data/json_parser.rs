@@ -2,14 +2,14 @@
 //!
 //! Parses JSON arrays of objects into DataSource structs.
 
+use crate::data::error::{DataError, DataResult};
 use crate::types::{DataCell, DataColumn, DataOrigin, DataRow, DataSource, DataType};
 use serde_json::Value;
 use std::path::PathBuf;
 
 /// Parse a JSON file into a DataSource
-pub fn parse_json_file(path: &PathBuf) -> Result<DataSource, String> {
-    let content = std::fs::read_to_string(path)
-        .map_err(|e| format!("Failed to read file: {}", e))?;
+pub fn parse_json_file(path: &PathBuf) -> DataResult<DataSource> {
+    let content = std::fs::read_to_string(path)?;
 
     let mut ds = parse_json_content(&content)?;
 
@@ -28,9 +28,8 @@ pub fn parse_json_file(path: &PathBuf) -> Result<DataSource, String> {
 }
 
 /// Parse JSON content from a string
-pub fn parse_json_content(json: &str) -> Result<DataSource, String> {
-    let value: Value =
-        serde_json::from_str(json).map_err(|e| format!("Invalid JSON: {}", e))?;
+pub fn parse_json_content(json: &str) -> DataResult<DataSource> {
+    let value: Value = serde_json::from_str(json)?;
 
     let array = extract_array(&value)?;
 
@@ -48,7 +47,7 @@ pub fn parse_json_content(json: &str) -> Result<DataSource, String> {
     // Extract columns from first object
     let first_obj = array[0]
         .as_object()
-        .ok_or("Array elements must be objects")?;
+        .ok_or_else(|| DataError::InvalidData("Array elements must be objects".to_string()))?;
 
     let column_names: Vec<String> = first_obj.keys().cloned().collect();
 
@@ -89,7 +88,7 @@ pub fn parse_json_content(json: &str) -> Result<DataSource, String> {
 }
 
 /// Extract the array from JSON value, handling common wrapper patterns
-fn extract_array(value: &Value) -> Result<&Vec<Value>, String> {
+fn extract_array(value: &Value) -> DataResult<&Vec<Value>> {
     match value {
         Value::Array(arr) => Ok(arr),
         Value::Object(obj) => {
@@ -100,9 +99,13 @@ fn extract_array(value: &Value) -> Result<&Vec<Value>, String> {
                     return Ok(arr);
                 }
             }
-            Err("JSON must be an array or have a data/rows/items/records/results array".to_string())
+            Err(DataError::InvalidData(
+                "JSON must be an array or have a data/rows/items/records/results array".to_string(),
+            ))
         }
-        _ => Err("JSON must be an array of objects".to_string()),
+        _ => Err(DataError::InvalidData(
+            "JSON must be an array of objects".to_string(),
+        )),
     }
 }
 
@@ -197,24 +200,30 @@ fn json_value_to_cell(value: &Value, expected_type: &DataType) -> DataCell {
 }
 
 /// Parse JSON from a URL (for API data sources)
-pub async fn fetch_json_from_url(url: &str) -> Result<DataSource, String> {
+pub async fn fetch_json_from_url(url: &str) -> DataResult<DataSource> {
     // This is a placeholder - in practice you'd use reqwest or similar
-    Err(format!("URL fetching not implemented yet: {}", url))
+    Err(DataError::InvalidData(format!(
+        "URL fetching not implemented yet: {}",
+        url
+    )))
 }
 
 /// Write a DataSource back to a JSON file
 ///
 /// Writes as an array of objects with pretty formatting.
 /// Returns the path written to, or an error message.
-pub fn write_json_file(data_source: &DataSource) -> Result<PathBuf, String> {
+pub fn write_json_file(data_source: &DataSource) -> DataResult<PathBuf> {
     let path = match &data_source.origin {
         DataOrigin::Json { path: Some(p) } => p.clone(),
-        _ => return Err("Data source does not have a JSON file origin".to_string()),
+        _ => {
+            return Err(DataError::InvalidData(
+                "Data source does not have a JSON file origin".to_string(),
+            ))
+        }
     };
 
     let content = write_json_content(data_source);
-    std::fs::write(&path, content)
-        .map_err(|e| format!("Failed to write file: {}", e))?;
+    std::fs::write(&path, content)?;
 
     Ok(path)
 }
@@ -354,5 +363,19 @@ mod tests {
 
         assert_eq!(parsed.columns.len(), reparsed.columns.len());
         assert_eq!(parsed.rows.len(), reparsed.rows.len());
+    }
+
+    #[test]
+    fn test_invalid_json_error() {
+        let json = "{invalid json";
+        let result = parse_json_content(json);
+        assert!(matches!(result, Err(DataError::Json(_))));
+    }
+
+    #[test]
+    fn test_invalid_data_error() {
+        let json = "\"not an array or object\"";
+        let result = parse_json_content(json);
+        assert!(matches!(result, Err(DataError::InvalidData(_))));
     }
 }

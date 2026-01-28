@@ -36,9 +36,9 @@ impl super::Humanboard {
     /// Handle retry action - attempt to redo the last failed operation
     fn handle_retry_action(&mut self, cx: &mut Context<Self>) {
         // If we have a board, try to save it again
-        if let Some(ref mut board) = self.board {
+        if let Some(ref mut board) = self.canvas.board {
             board.save();
-            self.toast_manager
+            self.ui.toast_manager
                 .push(Toast::success("Board saved successfully"));
             cx.notify();
         }
@@ -48,16 +48,16 @@ impl super::Humanboard {
     fn handle_save_as_action(&mut self, cx: &mut Context<Self>) {
         // TODO: Implement file dialog for Save As
         // For now, show info toast that this feature is coming
-        self.toast_manager
+        self.ui.toast_manager
             .push(Toast::info("Save As feature coming soon"));
         cx.notify();
     }
 
     /// Handle reset settings action - restore settings to defaults
     fn handle_reset_settings_action(&mut self, cx: &mut Context<Self>) {
-        self.settings = crate::settings::Settings::default();
-        self.settings.save();
-        self.toast_manager
+        self.settings.data = crate::settings::Settings::default();
+        self.settings.data.save();
+        self.ui.toast_manager
             .push(Toast::success("Settings reset to defaults"));
         cx.notify();
     }
@@ -65,10 +65,10 @@ impl super::Humanboard {
     /// Handle reload webview action - reload the current webview
     fn handle_reload_webview_action(&mut self, cx: &mut Context<Self>) {
         // Clear webviews to force reload on next render
-        self.youtube_webviews.clear();
-        self.audio_webviews.clear();
-        self.video_webviews.clear();
-        self.toast_manager.push(Toast::info("Webviews reloaded"));
+        self.webviews.youtube.clear();
+        self.webviews.audio.clear();
+        self.webviews.video.clear();
+        self.ui.toast_manager.push(Toast::info("Webviews reloaded"));
         cx.notify();
     }
 }

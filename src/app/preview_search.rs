@@ -7,7 +7,7 @@ use gpui_component::input::InputState;
 impl Humanboard {
     /// Toggle the preview search bar
     pub fn toggle_preview_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.preview_search.is_some() {
+        if self.preview.search.is_some() {
             self.close_preview_search(cx);
         } else {
             self.open_preview_search(window, cx);
@@ -16,7 +16,7 @@ impl Humanboard {
 
     /// Open the preview search bar
     pub fn open_preview_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.preview.is_none() {
+        if self.preview.panel.is_none() {
             return;
         }
 
@@ -49,27 +49,27 @@ impl Humanboard {
         )
         .detach();
 
-        self.preview_search = Some(input);
-        self.preview_search_query.clear();
-        self.preview_search_matches.clear();
-        self.preview_search_current = 0;
+        self.preview.search = Some(input);
+        self.preview.search_query.clear();
+        self.preview.search_matches.clear();
+        self.preview.search_current = 0;
         cx.notify();
     }
 
     /// Close the preview search bar
     pub fn close_preview_search(&mut self, cx: &mut Context<Self>) {
-        self.preview_search = None;
-        self.preview_search_query.clear();
-        self.preview_search_matches.clear();
-        self.preview_search_current = 0;
+        self.preview.search = None;
+        self.preview.search_query.clear();
+        self.preview.search_matches.clear();
+        self.preview.search_current = 0;
         cx.notify();
     }
 
     /// Update search matches based on query
     fn update_preview_search(&mut self, query: &str, cx: &mut Context<Self>) {
-        self.preview_search_query = query.to_string();
-        self.preview_search_matches.clear();
-        self.preview_search_current = 0;
+        self.preview.search_query = query.to_string();
+        self.preview.search_matches.clear();
+        self.preview.search_current = 0;
 
         if query.is_empty() {
             cx.notify();
@@ -77,7 +77,7 @@ impl Humanboard {
         }
 
         // Get content from active tab
-        let content = if let Some(ref preview) = self.preview {
+        let content = if let Some(ref preview) = self.preview.panel {
             if let Some(tab) = preview.tabs.get(preview.active_tab) {
                 match tab {
                     PreviewTab::Markdown { content, .. } => Some(content.clone()),
@@ -97,7 +97,7 @@ impl Humanboard {
                 let line_lower = line.to_lowercase();
                 let mut start = 0;
                 while let Some(col) = line_lower[start..].find(&query_lower) {
-                    self.preview_search_matches.push((line_idx, start + col));
+                    self.preview.search_matches.push((line_idx, start + col));
                     start += col + 1;
                 }
             }
@@ -108,20 +108,20 @@ impl Humanboard {
 
     /// Go to next search match
     pub fn next_search_match(&mut self, cx: &mut Context<Self>) {
-        if !self.preview_search_matches.is_empty() {
-            self.preview_search_current =
-                (self.preview_search_current + 1) % self.preview_search_matches.len();
+        if !self.preview.search_matches.is_empty() {
+            self.preview.search_current =
+                (self.preview.search_current + 1) % self.preview.search_matches.len();
             cx.notify();
         }
     }
 
     /// Go to previous search match
     pub fn prev_search_match(&mut self, cx: &mut Context<Self>) {
-        if !self.preview_search_matches.is_empty() {
-            self.preview_search_current = if self.preview_search_current == 0 {
-                self.preview_search_matches.len() - 1
+        if !self.preview.search_matches.is_empty() {
+            self.preview.search_current = if self.preview.search_current == 0 {
+                self.preview.search_matches.len() - 1
             } else {
-                self.preview_search_current - 1
+                self.preview.search_current - 1
             };
             cx.notify();
         }

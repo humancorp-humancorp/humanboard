@@ -18,7 +18,8 @@ use crate::constants::{DOCK_WIDTH, HEADER_HEIGHT};
 use crate::error::BoardError;
 use crate::profile_scope;
 use crate::spatial_index::SpatialIndex;
-use crate::data::{is_data_file, parse_csv_file, parse_json_file, write_csv_file, write_json_file};
+use crate::data::{is_data_file, parse_csv_file, parse_json_file, write_csv_file, write_json_file, ChartData};
+use crate::types::ChartConfig;
 use crate::types::DataOrigin;
 use crate::types::{CanvasItem, DataSource, ItemContent};
 use crate::validation::validate_items;
@@ -267,6 +268,29 @@ impl BoardState {
     }
 }
 
+/// Cache key for chart data - uniquely identifies a chart configuration
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+struct ChartCacheKey {
+    data_source_id: u64,
+    // Hash of the config to detect changes
+    config_hash: u64,
+}
+
+impl ChartCacheKey {
+    fn new(data_source_id: u64, config: &ChartConfig) -> Self {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        
+        let mut hasher = DefaultHasher::new();
+        config.hash(&mut hasher);
+        
+        Self {
+            data_source_id,
+            config_hash: hasher.finish(),
+        }
+    }
+}
+
 pub struct Board {
     pub id: String,
     pub canvas_offset: Point<Pixels>,
@@ -297,6 +321,9 @@ pub struct Board {
 
     // Storage location for this board (used to determine if files should be copied)
     storage_location: crate::board_index::StoredLocation,
+    
+    // Chart data cache - transient (not serialized)
+    chart_data_cache: HashMap<ChartCacheKey, ChartData>,
 }
 
 impl Board {
@@ -345,6 +372,7 @@ impl Board {
                 dirty: fixed_count > 0, // Mark dirty if we fixed anything
                 last_change: Instant::now(),
                 storage_location,
+                chart_data_cache: HashMap::new(),
             }
         } else {
             debug!("Creating new empty board '{}'", id);
@@ -375,6 +403,7 @@ impl Board {
             dirty: false,
             last_change: Instant::now(),
             storage_location,
+            chart_data_cache: HashMap::new(),
         }
     }
 
@@ -1019,9 +1048,9 @@ impl Board {
         let ds = self.data_sources.get(&data_source_id)
             .ok_or_else(|| "Data source not found".to_string())?;
 
-        let result = match &ds.origin {
-            DataOrigin::File { .. } => write_csv_file(ds),
-            DataOrigin::Json { path: Some(_) } => write_json_file(ds),
+        let result: Result<PathBuf, String> = match &ds.origin {
+            DataOrigin::File { .. } => write_csv_file(ds).map_err(|e| e.to_string()),
+            DataOrigin::Json { path: Some(_) } => write_json_file(ds).map_err(|e| e.to_string()),
             DataOrigin::Json { path: None } => {
                 Err("JSON data source has no file path".to_string())
             }
@@ -1051,9 +1080,9 @@ impl Board {
         let ds = self.data_sources.get(&data_source_id)
             .ok_or_else(|| "Data source not found".to_string())?;
 
-        let new_data = match &ds.origin {
-            DataOrigin::File { path, .. } => parse_csv_file(path),
-            DataOrigin::Json { path: Some(p) } => parse_json_file(p),
+        let new_data: DataSource = match &ds.origin {
+            DataOrigin::File { path, .. } => parse_csv_file(path).map_err(|e| e.to_string()),
+            DataOrigin::Json { path: Some(p) } => parse_json_file(p).map_err(|e| e.to_string()),
             DataOrigin::Json { path: None } => {
                 Err("JSON data source has no file path".to_string())
             }
@@ -1072,6 +1101,9 @@ impl Board {
             ds.mark_clean();
         }
 
+        // Invalidate chart cache since data has changed
+        self.invalidate_chart_cache_for_data_source(data_source_id);
+        
         self.mark_dirty();
         Ok(())
     }
@@ -1090,6 +1122,42 @@ impl Board {
             .unwrap_or(false)
     }
 
+    // =========================================================================
+    // Chart Data Cache
+    // =========================================================================
+
+    /// Get or compute chart data for a data source and config
+    /// 
+    /// This method caches the processed chart data to avoid recomputing
+    /// grouping, aggregation, and sorting on every render.
+    pub fn get_chart_data(&mut self, data_source_id: u64, config: &ChartConfig) -> Option<&ChartData> {
+        use crate::data::process_chart_data;
+        
+        let cache_key = ChartCacheKey::new(data_source_id, config);
+        
+        // Check if we have a cached version
+        if !self.chart_data_cache.contains_key(&cache_key) {
+            // Compute and cache the chart data
+            let data_source = self.data_sources.get(&data_source_id)?;
+            let chart_data = process_chart_data(data_source, config)?;
+            self.chart_data_cache.insert(cache_key.clone(), chart_data);
+        }
+        
+        self.chart_data_cache.get(&cache_key)
+    }
+
+    /// Invalidate chart data cache for a specific data source
+    /// 
+    /// Call this when a data source is modified to ensure chart data is recomputed
+    pub fn invalidate_chart_cache_for_data_source(&mut self, data_source_id: u64) {
+        self.chart_data_cache.retain(|key, _| key.data_source_id != data_source_id);
+    }
+
+    /// Clear all chart data cache
+    pub fn clear_chart_cache(&mut self) {
+        self.chart_data_cache.clear();
+    }
+
     /// Create a fresh board for testing (doesn't load from disk)
     pub fn new_for_test() -> Self {
         Self::new_empty("test-board".to_string())
@@ -1103,6 +1171,16 @@ impl Board {
     /// Get the current history index (for testing)
     pub fn current_history_index(&self) -> usize {
         self.history_index
+    }
+
+    /// Check if there's history to undo
+    pub fn can_undo(&self) -> bool {
+        self.history_index > 0
+    }
+
+    /// Check if there's history to redo
+    pub fn can_redo(&self) -> bool {
+        self.history_index < self.history.len()
     }
 }
 

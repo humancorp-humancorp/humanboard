@@ -9,7 +9,7 @@ impl Humanboard {
     /// Show the chart configuration modal for a table
     pub fn show_chart_config_modal(&mut self, table_item_id: u64, cx: &mut Context<Self>) {
         // Get the data source ID and column names from the table
-        if let Some(ref board) = self.board {
+        if let Some(ref board) = self.canvas.board {
             if let Some(item) = board.items.iter().find(|i| i.id == table_item_id) {
                 if let ItemContent::Table { data_source_id, .. } = &item.content {
                     if let Some(ds) = board.data_sources.get(data_source_id) {
@@ -111,7 +111,7 @@ impl Humanboard {
     ) {
         let chart_type_name = config.chart_type.label().to_string();
 
-        if let Some(ref mut board) = self.board {
+        if let Some(ref mut board) = self.canvas.board {
             // Find the table item to get its position
             if let Some(table_item) = board.items.iter().find(|i| i.id == table_item_id) {
                 let chart_pos = (
@@ -138,8 +138,8 @@ impl Humanboard {
                 board.update_spatial_index(chart_id);
 
                 // Select the new chart
-                self.selected_items.clear();
-                self.selected_items.insert(chart_id);
+                self.canvas.selected_items.clear();
+                self.canvas.selected_items.insert(chart_id);
 
                 // Save
                 board.push_history();
@@ -160,7 +160,7 @@ impl Humanboard {
     /// Save a table's data source back to its original file
     pub fn save_table_to_file(&mut self, table_item_id: u64, cx: &mut Context<Self>) {
         // Get the data source ID from the table
-        let data_source_id = if let Some(ref board) = self.board {
+        let data_source_id = if let Some(ref board) = self.canvas.board {
             board.items.iter()
                 .find(|i| i.id == table_item_id)
                 .and_then(|item| {
@@ -180,7 +180,7 @@ impl Humanboard {
         };
 
         // Save the data source
-        if let Some(ref mut board) = self.board {
+        if let Some(ref mut board) = self.canvas.board {
             match board.save_data_source_to_file(ds_id) {
                 Ok(path) => {
                     let filename = path.file_name()
@@ -202,7 +202,7 @@ impl Humanboard {
     /// Reload a table's data source from its original file
     pub fn reload_table_from_file(&mut self, table_item_id: u64, cx: &mut Context<Self>) {
         // Get the data source ID from the table
-        let data_source_id = if let Some(ref board) = self.board {
+        let data_source_id = if let Some(ref board) = self.canvas.board {
             board.items.iter()
                 .find(|i| i.id == table_item_id)
                 .and_then(|item| {
@@ -222,7 +222,7 @@ impl Humanboard {
         };
 
         // Reload the data source
-        if let Some(ref mut board) = self.board {
+        if let Some(ref mut board) = self.canvas.board {
             match board.reload_data_source_from_file(ds_id) {
                 Ok(()) => {
                     self.show_toast(crate::notifications::Toast::success("Reloaded from file"));
@@ -238,7 +238,7 @@ impl Humanboard {
 
     /// Check if a table's data source is dirty (has unsaved changes)
     pub fn is_table_dirty(&self, table_item_id: u64) -> bool {
-        if let Some(ref board) = self.board {
+        if let Some(ref board) = self.canvas.board {
             board.items.iter()
                 .find(|i| i.id == table_item_id)
                 .and_then(|item| {
@@ -256,7 +256,7 @@ impl Humanboard {
 
     /// Check if a table's data source can be saved to file
     pub fn can_save_table(&self, table_item_id: u64) -> bool {
-        if let Some(ref board) = self.board {
+        if let Some(ref board) = self.canvas.board {
             board.items.iter()
                 .find(|i| i.id == table_item_id)
                 .and_then(|item| {
@@ -275,7 +275,7 @@ impl Humanboard {
     /// Create a chart from an existing table item
     /// The chart will be positioned to the right of the table
     pub fn create_chart_from_table(&mut self, table_item_id: u64, chart_type: ChartType, cx: &mut Context<Self>) {
-        let Some(ref mut board) = self.board else {
+        let Some(ref mut board) = self.canvas.board else {
             return;
         };
 
@@ -315,8 +315,8 @@ impl Humanboard {
         board.update_spatial_index(chart_id);
 
         // Select the new chart
-        self.selected_items.clear();
-        self.selected_items.insert(chart_id);
+        self.canvas.selected_items.clear();
+        self.canvas.selected_items.insert(chart_id);
 
         // Save
         board.push_history();

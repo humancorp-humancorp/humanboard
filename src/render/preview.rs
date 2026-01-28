@@ -54,9 +54,9 @@ pub fn render_tab_bar(
         .on_mouse_up(
             MouseButton::Left,
             cx.listener(|this, _event, _window, cx| {
-                if this.dragging_tab.is_some() {
+                if this.preview.dragging_tab.is_some() {
                     this.finish_tab_drag(cx);
-                } else if this.tab_drag_pending.is_some() {
+                } else if this.preview.tab_drag_pending.is_some() {
                     this.cancel_pending_drag(cx);
                 }
             }),
@@ -118,7 +118,7 @@ pub fn render_tab_bar(
                             CursorStyle::PointingHand
                         })
                         .on_click(cx.listener(move |this, _event, _window, cx| {
-                            if this.dragging_tab.is_none() {
+                            if this.preview.dragging_tab.is_none() {
                                 this.switch_tab_in_pane(tab_index, is_left_pane, cx);
                             }
                         }))
@@ -137,9 +137,9 @@ pub fn render_tab_bar(
                         .on_mouse_move(cx.listener(
                             move |this, event: &MouseMoveEvent, _window, cx| {
                                 // Check pending drag threshold or update active drag
-                                if this.tab_drag_pending.is_some() || this.dragging_tab.is_some() {
+                                if this.preview.tab_drag_pending.is_some() || this.preview.dragging_tab.is_some() {
                                     this.update_tab_drag_position(event.position, cx);
-                                    if this.dragging_tab.is_some() {
+                                    if this.preview.dragging_tab.is_some() {
                                         this.update_tab_drag_target(tab_index_drag, cx);
                                     }
                                 }
@@ -149,9 +149,9 @@ pub fn render_tab_bar(
                         .on_mouse_up(
                             MouseButton::Left,
                             cx.listener(move |this, _event, _window, cx| {
-                                if this.dragging_tab.is_some() {
+                                if this.preview.dragging_tab.is_some() {
                                     this.finish_tab_drag(cx);
-                                } else if this.tab_drag_pending.is_some() {
+                                } else if this.preview.tab_drag_pending.is_some() {
                                     // Threshold wasn't reached - cancel pending and let click handle tab switch
                                     this.cancel_pending_drag(cx);
                                 }
@@ -789,7 +789,7 @@ fn render_pane_splitter(is_horizontal: bool, cx: &mut Context<Humanboard>) -> St
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(|this, _event: &MouseDownEvent, _window, cx| {
-                    this.dragging_pane_splitter = true;
+                    this.preview.dragging_pane_splitter = true;
                     cx.notify();
                 }),
             )
@@ -809,7 +809,7 @@ fn render_pane_splitter(is_horizontal: bool, cx: &mut Context<Humanboard>) -> St
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(|this, _event: &MouseDownEvent, _window, cx| {
-                    this.dragging_pane_splitter = true;
+                    this.preview.dragging_pane_splitter = true;
                     cx.notify();
                 }),
             )
@@ -957,7 +957,7 @@ pub fn render_tab_content(
                         .key_context(FocusContext::KEY_CODE_EDITOR)
                         .on_click(cx.listener(move |this, _event, window, cx| {
                             // Set focus context to CodeEditor and focus the editor
-                            this.focus
+                            this.system.focus
                                 .focus(crate::focus::FocusContext::CodeEditor, window);
                             code_editor_focus.focus(window);
                             if let Some(ref ed) = editor_entity {
@@ -1047,7 +1047,7 @@ pub fn render_tab_content(
                         .key_context(FocusContext::KEY_PREVIEW)
                         .on_click(cx.listener(move |this, _event, window, cx| {
                             // Set focus context to Preview and focus the table
-                            this.focus.focus(crate::focus::FocusContext::Preview, window);
+                            this.system.focus.focus(crate::focus::FocusContext::Preview, window);
                             table_focus.focus(window);
                             cx.notify();
                         }))
@@ -1314,8 +1314,8 @@ pub fn render_splitter(direction: SplitDirection, cx: &mut Context<Humanboard>) 
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(|this, event: &MouseDownEvent, _, cx| {
-                    this.dragging_splitter = true;
-                    this.splitter_drag_start = Some(event.position);
+                    this.preview.dragging_splitter = true;
+                    this.preview.splitter_drag_start = Some(event.position);
                     cx.notify();
                 }),
             )
@@ -1332,8 +1332,8 @@ pub fn render_splitter(direction: SplitDirection, cx: &mut Context<Humanboard>) 
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(|this, event: &MouseDownEvent, _, cx| {
-                    this.dragging_splitter = true;
-                    this.splitter_drag_start = Some(event.position);
+                    this.preview.dragging_splitter = true;
+                    this.preview.splitter_drag_start = Some(event.position);
                     cx.notify();
                 }),
             )

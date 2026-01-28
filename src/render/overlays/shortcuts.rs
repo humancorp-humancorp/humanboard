@@ -25,7 +25,7 @@ pub fn render_shortcuts_overlay(cx: &mut Context<Humanboard>) -> impl IntoElemen
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(|this, _, _, cx| {
-                    this.show_shortcuts = false;
+                    this.ui.show_shortcuts = false;
                     cx.notify();
                 }),
             )

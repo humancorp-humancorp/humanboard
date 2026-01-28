@@ -325,7 +325,7 @@ fn render_styled_paragraph(
                 .bg(code_bg)
                 .rounded(px(3.0 * zoom))
                 .text_size(px(12.0 * zoom))
-                .font_family("Iosevka Nerd Font")
+                .font_family(crate::constants::DEFAULT_CODE_FONT)
                 .text_color(code_text)
                 .child(text)
         } else {
@@ -621,7 +621,7 @@ pub fn render_markdown_content<V: 'static>(content: &str, zoom: f32, cx: &mut Co
                             div()
                                 .text_size(px(12.0 * zoom))
                                 .text_color(code_block_color)
-                                .font_family("Iosevka Nerd Font")
+                                .font_family(crate::constants::DEFAULT_CODE_FONT)
                                 .line_height(relative(1.5))
                                 .whitespace_nowrap()
                                 .child(text),

@@ -17,15 +17,16 @@
 //!
 //! ## Performance Notes
 //!
-//! Hit testing is O(n) where n is the number of items. For boards with many
-//! items (>500), consider implementing spatial indexing (quadtree/R-tree).
-//! Current implementation iterates through all items in reverse order.
+//! Hit testing uses spatial indexing (R-tree) for O(log n) performance when
+//! a spatial index is provided. Falls back to O(n) linear scan if no index
+//! is available. For boards with many items (>500), use the spatial index.
 //!
 //! Enable profiling with `cargo build --features profiling` to track hit test times.
 
-use crate::constants::{DOCK_WIDTH, FOOTER_HEIGHT, HEADER_HEIGHT, MIN_HIT_AREA, SPLITTER_WIDTH};
-use crate::profile_scope;
+use crate::constants::{DOCK_WIDTH, FOOTER_HEIGHT, HEADER_HEIGHT, MIN_HIT_AREA, RESIZE_CORNER_SIZE, RESIZE_CORNER_TOLERANCE, SPLITTER_WIDTH};
 use crate::types::ItemContent;
+use crate::profile_scope;
+use crate::spatial_index::SpatialIndex;
 use gpui::*;
 
 /// The result of a hit test on the canvas.
@@ -87,7 +88,7 @@ impl Default for HitTestConfig {
             header_height: HEADER_HEIGHT,
             dock_width: DOCK_WIDTH,
             footer_height: FOOTER_HEIGHT,
-            resize_corner_size: 30.0,
+            resize_corner_size: RESIZE_CORNER_SIZE,
             splitter_width: SPLITTER_WIDTH,
             min_border_hit_area: MIN_HIT_AREA,
         }
@@ -133,6 +134,7 @@ impl HitTestContentType {
 /// Hit tester for canvas items.
 pub struct HitTester {
     config: HitTestConfig,
+    spatial_index: Option<SpatialIndex>,
 }
 
 impl HitTester {
@@ -140,12 +142,22 @@ impl HitTester {
     pub fn new() -> Self {
         Self {
             config: HitTestConfig::default(),
+            spatial_index: None,
         }
     }
 
     /// Create a new hit tester with custom configuration.
     pub fn with_config(config: HitTestConfig) -> Self {
-        Self { config }
+        Self {
+            config,
+            spatial_index: None,
+        }
+    }
+
+    /// Set the spatial index for O(log n) hit testing.
+    pub fn with_spatial_index(mut self, index: SpatialIndex) -> Self {
+        self.spatial_index = Some(index);
+        self
     }
 
     /// Perform a hit test at the given screen position.
@@ -162,12 +174,12 @@ impl HitTester {
     /// The hit test result indicating what was hit.
     ///
     /// ## Performance
-    /// O(n) where n is the number of items. UI chrome checks (header, dock, etc.)
-    /// are O(1) and checked first for early exit.
+    /// O(log n) when spatial index is available, O(n) otherwise. UI chrome checks
+    /// (header, dock, etc.) are O(1) and checked first for early exit.
     pub fn hit_test(
         &self,
         mouse_pos: Point<Pixels>,
-        items: impl DoubleEndedIterator<Item = HitTestItem>,
+        items: impl DoubleEndedIterator<Item = HitTestItem> + Clone,
         canvas_offset: Point<Pixels>,
         zoom: f32,
         window_size: Size<Pixels>,
@@ -221,10 +233,31 @@ impl HitTester {
             // to prioritize footer UI elements
         }
 
-        // Hit test items in reverse order (front-to-back for top items first)
-        for item in items.rev() {
-            if let Some(hit) = self.hit_test_item(&item, mouse_pos, canvas_offset, zoom) {
-                return HitTestResult::Item(hit);
+        // Use spatial index if available for O(log n) performance
+        if let Some(ref index) = self.spatial_index {
+            let canvas_x =
+                (f32::from(mouse_pos.x) - self.config.dock_width - f32::from(canvas_offset.x))
+                    / zoom;
+            let canvas_y =
+                (f32::from(mouse_pos.y) - self.config.header_height - f32::from(canvas_offset.y))
+                    / zoom;
+
+            let candidate_ids = index.query_point(canvas_x, canvas_y);
+
+            // Test only candidates in reverse z-order (highest first)
+            for id in candidate_ids.iter().rev() {
+                if let Some(item) = items.clone().find(|i| i.id == *id) {
+                    if let Some(hit) = self.hit_test_item(&item, mouse_pos, canvas_offset, zoom) {
+                        return HitTestResult::Item(hit);
+                    }
+                }
+            }
+        } else {
+            // Fallback to linear scan - O(n)
+            for item in items.rev() {
+                if let Some(hit) = self.hit_test_item(&item, mouse_pos, canvas_offset, zoom) {
+                    return HitTestResult::Item(hit);
+                }
             }
         }
 
@@ -266,9 +299,9 @@ impl HitTester {
         let corner_y = scaled_y + scaled_height;
 
         let in_resize_corner = mx >= corner_x - corner_size
-            && mx <= corner_x + 5.0
+            && mx <= corner_x + RESIZE_CORNER_TOLERANCE
             && my >= corner_y - corner_size
-            && my <= corner_y + 5.0;
+            && my <= corner_y + RESIZE_CORNER_TOLERANCE;
 
         if in_resize_corner {
             return Some(ItemHit {

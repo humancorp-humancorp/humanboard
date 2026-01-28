@@ -748,173 +748,65 @@ fn render_item_content(
                 .when_some(fill, |d, c| d.bg(c))
         }
 
-        ItemContent::Table { data_source_id, show_headers: _, stripe: _ } => {
-            let border_color = muted_fg.opacity(0.3);
-            let header_height = 32.0 * zoom;
-            let row_height = 24.0 * zoom;
-            let font_size = 11.0 * zoom;
-            let small_font = 10.0 * zoom;
-            let item_width = item.size.0 * zoom;
-            let accent_color = hsla(210.0 / 360.0, 0.7, 0.5, 1.0); // Blue accent
+        ItemContent::Table { data_source_id, .. } => {
+            // Render table as a compact file card (like code files)
+            // Colors tailored for data/CSV files
+            let bg = hsla(220.0 / 360.0, 0.15, 0.14, 1.0); // Darker bg like code
+            let border = hsla(140.0 / 360.0, 0.3, 0.35, 1.0); // Green-ish border for data
+            let hover_bg = hsla(220.0 / 360.0, 0.15, 0.18, 1.0);
+            let hover_border = hsla(140.0 / 360.0, 0.5, 0.5, 1.0); // Brighter green on hover
+            let icon_color = hsla(140.0 / 360.0, 0.6, 0.5, 1.0); // Green icon for data
+            let text_color = hsla(0.0, 0.0, 0.85, 1.0);
+            let badge_bg = hsla(140.0 / 360.0, 0.4, 0.25, 1.0); // Green badge bg
+            let badge_text = hsla(140.0 / 360.0, 0.6, 0.8, 1.0); // Green badge text
 
             if let Some(data_source) = data_sources.get(data_source_id) {
                 let row_count = data_source.rows.len();
                 let col_count = data_source.column_count();
-                let table_name = data_source.file_path()
-                    .and_then(|p| p.file_stem())
+                let filename = data_source.file_path()
+                    .and_then(|p| p.file_name())
                     .and_then(|n| n.to_str())
-                    .unwrap_or("Table");
+                    .unwrap_or("data.csv");
 
-                // Show thumbnail view with header, stats, and preview rows
-                let preview_rows = 5.min(row_count);
-                let col_width = if col_count > 0 {
-                    ((item_width - 2.0 * zoom) / col_count.min(10) as f32).max(60.0 * zoom)
-                } else {
-                    100.0 * zoom
-                };
-
+                // Compact file card style (like code files)
                 div()
                     .size_full()
-                    .bg(muted_bg.opacity(0.05))
-                    .rounded(corner_radius)
-                    .border_1()
-                    .border_color(border_color)
-                    .overflow_hidden()
+                    .bg(bg)
+                    .rounded(px(6.0 * zoom))
+                    .border(px(1.0 * zoom))
+                    .border_color(border)
+                    .cursor(CursorStyle::PointingHand)
+                    .hover(move |s| s.bg(hover_bg).border_color(hover_border))
                     .flex()
-                    .flex_col()
-                    // Header with table name and stats
+                    .items_center()
+                    .gap(px(8.0 * zoom))
+                    .px(px(12.0 * zoom))
                     .child(
-                        div()
-                            .h(px(header_height))
-                            .w_full()
-                            .bg(accent_color.opacity(0.15))
-                            .border_b_1()
-                            .border_color(border_color)
-                            .px(px(8.0 * zoom))
-                            .flex()
-                            .items_center()
-                            .justify_between()
-                            .child(
-                                div()
-                                    .flex()
-                                    .items_center()
-                                    .gap(px(6.0 * zoom))
-                                    .child(
-                                        Icon::new(IconName::LayoutDashboard)
-                                            .size(px(14.0 * zoom))
-                                            .text_color(accent_color)
-                                    )
-                                    .child(
-                                        div()
-                                            .text_size(px(font_size))
-                                            .font_weight(FontWeight::SEMIBOLD)
-                                            .text_color(fg)
-                                            .child(table_name.to_string())
-                                    )
-                            )
-                            .child(
-                                div()
-                                    .text_size(px(small_font))
-                                    .text_color(muted_fg)
-                                    .child(format!("{} rows × {} cols", row_count, col_count))
-                            )
+                        Icon::new(IconName::LayoutDashboard)
+                            .size(px(16.0 * zoom))
+                            .text_color(icon_color),
                     )
-                    // Column headers
-                    .child(
-                        div()
-                            .h(px(row_height))
-                            .w_full()
-                            .bg(muted_bg.opacity(0.3))
-                            .border_b_1()
-                            .border_color(border_color)
-                            .flex()
-                            .overflow_hidden()
-                            .children(
-                                data_source.columns.iter().take(10).map(|col| {
-                                    div()
-                                        .w(px(col_width))
-                                        .h_full()
-                                        .px(px(4.0 * zoom))
-                                        .flex()
-                                        .items_center()
-                                        .border_r_1()
-                                        .border_color(border_color.opacity(0.5))
-                                        .child(
-                                            div()
-                                                .text_size(px(small_font))
-                                                .font_weight(FontWeight::MEDIUM)
-                                                .text_color(fg)
-                                                .overflow_hidden()
-                                                .text_ellipsis()
-                                                .child(col.name.clone())
-                                        )
-                                })
-                            )
-                    )
-                    // Preview rows
                     .child(
                         div()
                             .flex_1()
-                            .w_full()
+                            .text_size(px(12.0 * zoom))
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(text_color)
                             .overflow_hidden()
-                            .children(
-                                (0..preview_rows).map(|row_idx| {
-                                    let is_alt = row_idx % 2 == 1;
-                                    div()
-                                        .h(px(row_height))
-                                        .w_full()
-                                        .when(is_alt, |d| d.bg(muted_bg.opacity(0.15)))
-                                        .border_b_1()
-                                        .border_color(border_color.opacity(0.3))
-                                        .flex()
-                                        .overflow_hidden()
-                                        .children(
-                                            (0..col_count.min(10)).map(|col_idx| {
-                                                let cell_value = data_source.rows
-                                                    .get(row_idx)
-                                                    .and_then(|r| r.cells.get(col_idx))
-                                                    .map(|c| c.to_string())
-                                                    .unwrap_or_default();
-                                                div()
-                                                    .w(px(col_width))
-                                                    .h_full()
-                                                    .px(px(4.0 * zoom))
-                                                    .flex()
-                                                    .items_center()
-                                                    .border_r_1()
-                                                    .border_color(border_color.opacity(0.3))
-                                                    .child(
-                                                        div()
-                                                            .text_size(px(small_font))
-                                                            .text_color(muted_fg)
-                                                            .overflow_hidden()
-                                                            .text_ellipsis()
-                                                            .child(cell_value)
-                                                    )
-                                            })
-                                        )
-                                })
-                            )
+                            .whitespace_nowrap()
+                            .child(filename.to_string()),
                     )
-                    // Footer hint
                     .child(
+                        // Stats badge showing rows × cols
                         div()
-                            .h(px(row_height))
-                            .w_full()
-                            .bg(muted_bg.opacity(0.2))
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .child(
-                                div()
-                                    .text_size(px(small_font))
-                                    .text_color(muted_fg.opacity(0.7))
-                                    .child(if row_count > preview_rows {
-                                        format!("... {} more rows • Double-click to view", row_count - preview_rows)
-                                    } else {
-                                        "Double-click to view full table".to_string()
-                                    })
-                            )
+                            .px(px(6.0 * zoom))
+                            .py(px(2.0 * zoom))
+                            .bg(badge_bg)
+                            .rounded(px(3.0 * zoom))
+                            .text_size(px(9.0 * zoom))
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(badge_text)
+                            .child(format!("{}×{}", row_count, col_count)),
                     )
             } else {
                 // Data source not found - show placeholder
@@ -923,7 +815,7 @@ fn render_item_content(
                     .bg(muted_bg)
                     .rounded(corner_radius)
                     .border_1()
-                    .border_color(border_color)
+                    .border_color(muted_fg.opacity(0.3))
                     .flex()
                     .items_center()
                     .justify_center()
@@ -944,95 +836,12 @@ fn render_item_content(
             let font_size = 11.0 * zoom;
 
             if let Some(data_source) = data_sources.get(data_source_id) {
-                let col_count = data_source.column_count();
-
-                // Get column names for context
-                let x_col = config.x_column.unwrap_or(0);
-                let y_col = if config.y_columns.is_empty() {
-                    if col_count > 1 { 1 } else { 0 }
-                } else {
-                    config.y_columns[0]
-                };
-
-                let x_col_name = data_source.columns.get(x_col).map(|c| c.name.as_str()).unwrap_or("X");
-                let y_col_name = data_source.columns.get(y_col).map(|c| c.name.as_str()).unwrap_or("Value");
-
-                // Build chart data points
-                #[derive(Clone)]
-                struct ChartPoint {
-                    label: String,
-                    value: f64,
-                    color: Hsla,
-                }
-
-                // Highly distinct colors - maximally separated on color wheel
-                let chart_colors = [
-                    hsla(220.0 / 360.0, 0.85, 0.55, 1.0),  // Bright Blue
-                    hsla(140.0 / 360.0, 0.75, 0.45, 1.0),  // Green
-                    hsla(30.0 / 360.0, 0.95, 0.55, 1.0),   // Orange
-                    hsla(270.0 / 360.0, 0.75, 0.55, 1.0),  // Violet/Purple
-                    hsla(0.0 / 360.0, 0.80, 0.55, 1.0),    // Red
-                    hsla(175.0 / 360.0, 0.75, 0.45, 1.0),  // Cyan/Teal
-                    hsla(55.0 / 360.0, 0.90, 0.50, 1.0),   // Yellow
-                    hsla(320.0 / 360.0, 0.75, 0.55, 1.0),  // Pink/Magenta
-                ];
-
-                // Build chart data with grouping, aggregation, and sorting
-                let data: Vec<ChartPoint> = {
-                    use std::collections::HashMap;
-                    use crate::types::{AggregationType, SortOrder};
-
-                    // Group raw values by label (X column), preserving insertion order
-                    let mut group_order: Vec<String> = Vec::new();
-                    let mut groups: HashMap<String, Vec<f64>> = HashMap::new();
-                    for row in &data_source.rows {
-                        let label = row.cells.get(x_col).map(|c| c.to_string()).unwrap_or_default();
-                        let value = row.cells.get(y_col).map(|c| c.to_f64()).unwrap_or(0.0);
-                        if !groups.contains_key(&label) {
-                            group_order.push(label.clone());
-                        }
-                        groups.entry(label).or_default().push(value);
-                    }
-
-                    // Apply aggregation in insertion order
-                    let mut points: Vec<(String, f64)> = group_order.into_iter().map(|label| {
-                        let values = groups.get(&label).unwrap();
-                        let aggregated = match config.aggregation {
-                            AggregationType::None => values.first().copied().unwrap_or(0.0),
-                            AggregationType::Sum => values.iter().sum(),
-                            AggregationType::Average => {
-                                if values.is_empty() { 0.0 }
-                                else { values.iter().sum::<f64>() / values.len() as f64 }
-                            }
-                            AggregationType::Count => values.len() as f64,
-                            AggregationType::Min => values.iter().cloned().fold(f64::INFINITY, f64::min),
-                            AggregationType::Max => values.iter().cloned().fold(f64::NEG_INFINITY, f64::max),
-                        };
-                        (label, aggregated)
-                    }).collect();
-
-                    // Apply sorting
-                    match config.sort_order {
-                        SortOrder::None => {} // Keep original insertion order
-                        SortOrder::LabelAsc => points.sort_by(|a, b| a.0.cmp(&b.0)),
-                        SortOrder::LabelDesc => points.sort_by(|a, b| b.0.cmp(&a.0)),
-                        SortOrder::ValueAsc => points.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal)),
-                        SortOrder::ValueDesc => points.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)),
-                    }
-
-                    // Convert to ChartPoints with colors, limit for readability
-                    points.into_iter()
-                        .take(12)
-                        .enumerate()
-                        .map(|(i, (label, value))| {
-                            ChartPoint {
-                                label,
-                                value,
-                                color: chart_colors[i % chart_colors.len()],
-                            }
-                        })
-                        .collect()
-                };
+                use crate::data::process_chart_data;
+                
+                // Process chart data (grouping, aggregation, sorting)
+                let chart_data = process_chart_data(data_source, config);
+                
+                if let Some(chart_data) = chart_data {
 
                 let mut chart_container = div()
                     .size_full()
@@ -1081,7 +890,7 @@ fn render_item_content(
                                                 AggregationType::Min => "Min of ",
                                                 AggregationType::Max => "Max of ",
                                             };
-                                            format!("{}{} by {}", agg_label, y_col_name, x_col_name)
+                                            format!("{}{} by {}", agg_label, chart_data.y_label, chart_data.x_label)
                                         })
                                 )
                         )
@@ -1115,14 +924,14 @@ fn render_item_content(
                 }
 
                 // Calculate Y-axis range for bar/line/scatter charts
-                let max_val = data.iter().map(|d| d.value).fold(0.0_f64, |a, b| a.max(b));
+                let max_val = chart_data.points.iter().map(|d| d.value).fold(0.0_f64, |a, b| a.max(b));
                 let y_axis_font_size = font_size * 0.75;
                 let y_axis_width = 32.0 * zoom;
 
                 // Chart content
                 match config.chart_type {
                     crate::types::ChartType::Bar => {
-                        let bar_chart = BarChart::new(data.clone())
+                        let bar_chart = BarChart::new(chart_data.points.clone())
                             .x(|d| d.label.clone())
                             .y(|d| d.value)
                             .fill(|d| d.color);
@@ -1160,8 +969,8 @@ fn render_item_content(
                         );
                     }
                     crate::types::ChartType::Line | crate::types::ChartType::Area => {
-                        let line_color = chart_colors[0];
-                        let line_chart = LineChart::new(data.clone())
+                        let line_color = crate::data::CHART_COLORS[0];
+                        let line_chart = LineChart::new(chart_data.points.clone())
                             .x(|d| d.label.clone())
                             .y(|d| d.value)
                             .stroke(line_color)
@@ -1204,14 +1013,14 @@ fn render_item_content(
                         let available_height = item.size.1 * zoom - header_height - padding * 2.0;
                         let pie_size = (available_height * 0.4).min(80.0 * zoom).max(30.0 * zoom);
 
-                        let pie_chart = PieChart::new(data.clone())
+                        let pie_chart = PieChart::new(chart_data.points.clone())
                             .value(|d| d.value as f32)
                             .color(|d| d.color)
                             .outer_radius(pie_size)
                             .inner_radius(pie_size * 0.55);  // Donut style
 
                         // Pie with legend side by side
-                        let total: f64 = data.iter().map(|d| d.value).sum();
+                        let total: f64 = chart_data.points.iter().map(|d| d.value).sum();
                         chart_container = chart_container.child(
                             div()
                                 .flex_1()
@@ -1241,7 +1050,7 @@ fn render_item_content(
                                         .gap(px(3.0 * zoom))
                                         .overflow_hidden();
 
-                                    for point in data.iter().take(6) {
+                                    for point in chart_data.points.iter().take(6) {
                                         let pct = if total > 0.0 { point.value / total * 100.0 } else { 0.0 };
                                         legend = legend.child(
                                             div()
@@ -1283,8 +1092,8 @@ fn render_item_content(
                     }
                     crate::types::ChartType::Scatter => {
                         // Use line chart without connecting lines (just dots)
-                        let line_color = chart_colors[0];
-                        let scatter_chart = LineChart::new(data.clone())
+                        let line_color = crate::data::CHART_COLORS[0];
+                        let scatter_chart = LineChart::new(chart_data.points.clone())
                             .x(|d| d.label.clone())
                             .y(|d| d.value)
                             .stroke(line_color.opacity(0.0))  // No line
@@ -1325,6 +1134,24 @@ fn render_item_content(
                 }
 
                 chart_container
+                } else {
+                    // No data after processing
+                    div()
+                        .size_full()
+                        .bg(muted_bg.opacity(0.05))
+                        .rounded(corner_radius)
+                        .border_1()
+                        .border_color(border_color)
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .child(
+                            div()
+                                .text_size(px(14.0 * zoom))
+                                .text_color(muted_fg)
+                                .child("No data")
+                        )
+                }
             } else {
                 // Data source not found
                 div()
@@ -1340,7 +1167,7 @@ fn render_item_content(
                         div()
                             .text_size(px(14.0 * zoom))
                             .text_color(muted_fg)
-                            .child("No data")
+                            .child("Data source not found")
                     )
             }
         }
@@ -1405,7 +1232,7 @@ pub fn render_items(
     table_states: &HashMap<u64, Entity<TableState<DataSourceDelegate>>>,
     editing_textbox_id: Option<u64>,
     textbox_input: Option<&Entity<InputState>>,
-    editing_table_cell: Option<(u64, usize, usize)>,
+    _editing_table_cell: Option<(u64, usize, usize)>,
     table_cell_input: Option<&Entity<InputState>>,
     viewport_size: Size<Pixels>,
     cx: &Context<Humanboard>,
@@ -1471,74 +1298,17 @@ pub fn render_items(
                     table_states,
                     editing_textbox_id,
                     textbox_input,
-                    editing_table_cell,
+                    _editing_table_cell,
                     table_cell_input,
                     fg,
                     muted_fg,
                     muted_bg,
                     danger,
                 ))
-                // Add double-click handler for table cell editing (only when NOT currently editing this table)
-                .when(is_table && editing_table_cell.map(|(id, _, _)| id != item_id).unwrap_or(true), |d| {
-                    // Get table dimensions for cell position calculation
-                    let cell_height = 28.0 * zoom;
-                    let header_height = cell_height; // Header is same height as cells
-                    let table_width = w;
-                    let table_x = x;
-                    let table_y = y;
-
-                    d.child(
-                        div()
-                            .id(ElementId::Name(format!("table-click-{}", item_id).into()))
-                            .absolute()
-                            .inset_0()
-                            .on_mouse_down(MouseButton::Left, cx.listener(move |this, event: &MouseDownEvent, window, cx| {
-                                // Check for double-click
-                                if event.click_count == 2 {
-                                    // Calculate which cell was clicked
-                                    // event.position is in window coordinates, need to convert to canvas coordinates
-                                    let click_x: f32 = event.position.x.into();
-                                    let click_y: f32 = event.position.y.into();
-
-                                    // Subtract dock width and header height to get canvas-relative coordinates
-                                    let canvas_click_x = click_x - crate::constants::DOCK_WIDTH;
-                                    let canvas_click_y = click_y - crate::constants::HEADER_HEIGHT;
-
-                                    if let Some(ref board) = this.board {
-                                        if let Some(table_item) = board.items.iter().find(|i| i.id == item_id) {
-                                            if let ItemContent::Table { data_source_id, show_headers, .. } = &table_item.content {
-                                                if let Some(ds) = board.data_sources.get(data_source_id) {
-                                                    let col_count = ds.column_count();
-                                                    if col_count == 0 { return; }
-
-                                                    let col_width = table_width / col_count as f32;
-
-                                                    // Calculate row and column from click position (relative to table)
-                                                    let local_y = canvas_click_y - table_y;
-                                                    let local_x = canvas_click_x - table_x;
-
-                                                    // Skip header row if shown
-                                                    let header_offset = if *show_headers { header_height } else { 0.0 };
-
-                                                    if local_y < header_offset {
-                                                        return; // Clicked on header, don't edit
-                                                    }
-
-                                                    let row = ((local_y - header_offset) / cell_height).floor() as usize;
-                                                    let col = (local_x / col_width).floor() as usize;
-
-                                                    // Bounds check
-                                                    if row < ds.row_count() && col < col_count {
-                                                        this.start_table_cell_editing(item_id, row, col, window, cx);
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }))
-                    )
-                })
+                // NOTE: Table cell editing temporarily disabled
+                // The double-click to edit feature was causing focus issues.
+                // To edit table data, open the table in the preview panel.
+                // TODO: Re-implement with proper focus management
                 .when(show_selection, |d| {
                     d
                         // Selection border
@@ -1681,7 +1451,7 @@ pub fn render_canvas_area(
     table_states: &HashMap<u64, Entity<TableState<DataSourceDelegate>>>,
     editing_textbox_id: Option<u64>,
     textbox_input: Option<&Entity<InputState>>,
-    editing_table_cell: Option<(u64, usize, usize)>,
+    _editing_table_cell: Option<(u64, usize, usize)>,
     table_cell_input: Option<&Entity<InputState>>,
     marquee: Option<(Point<Pixels>, Point<Pixels>)>,
     drawing_preview: Option<(Point<Pixels>, Point<Pixels>, crate::types::ToolType)>,
@@ -1714,7 +1484,7 @@ pub fn render_canvas_area(
             table_states,
             editing_textbox_id,
             textbox_input,
-            editing_table_cell,
+            _editing_table_cell,
             table_cell_input,
             viewport_size,
             cx,

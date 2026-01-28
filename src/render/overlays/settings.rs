@@ -2,6 +2,7 @@
 
 use crate::actions::{ModalFocusNext, ModalFocusPrev, OpenSettings};
 use crate::app::{Humanboard, SettingsTab};
+use crate::constants::{MODAL_HEIGHT_MD, MODAL_WIDTH_LG};
 use crate::focus::FocusContext;
 use crate::settings::Settings;
 use gpui::prelude::FluentBuilder;
@@ -9,12 +10,62 @@ use gpui::*;
 use gpui_component::{h_flex, v_flex, ActiveTheme as _, Icon, IconName};
 
 use super::modal_base::{
-    render_section_header, render_setting_row, FontDropdownOpen, ThemeDropdownOpen,
+    modal_intercept_backdrop_clicks_stateful, render_modal_backdrop, render_section_header,
+    render_setting_row, FontDropdownOpen, ThemeDropdownOpen,
 };
 use super::settings_dropdowns::{
     render_font_dropdown, render_font_dropdown_menu, render_theme_dropdown,
     render_theme_dropdown_menu,
 };
+
+/// Render a settings sidebar tab button
+fn render_settings_tab_button(
+    id: impl Into<ElementId>,
+    tab: SettingsTab,
+    active_tab: SettingsTab,
+    icon: IconName,
+    label: &str,
+    fg: Hsla,
+    muted_fg: Hsla,
+    list_active: Hsla,
+    list_hover: Hsla,
+    cx: &mut Context<Humanboard>,
+) -> Stateful<Div> {
+    let is_active = active_tab == tab;
+    let text_color = if is_active { fg } else { muted_fg };
+    
+    div()
+        .id(id)
+        .w_full()
+        .px_2()
+        .py_1p5()
+        .rounded(px(4.0))
+        .cursor(CursorStyle::PointingHand)
+        .when(is_active, |d| d.bg(list_active))
+        .when(!is_active, |d| d.hover(|s| s.bg(list_hover)))
+        .on_mouse_down(
+            MouseButton::Left,
+            cx.listener(move |this, _, _, cx| {
+                this.set_settings_tab(tab, cx);
+            }),
+        )
+        .child(
+            h_flex()
+                .gap_2()
+                .items_center()
+                .child(
+                    Icon::new(icon)
+                        .size(px(14.0))
+                        .text_color(text_color),
+                )
+                .child(
+                    div()
+                        .text_sm()
+                        .text_color(text_color)
+                        .child(label.to_string()),
+                ),
+        )
+}
 
 /// Render the settings modal
 pub fn render_settings_modal(
@@ -41,92 +92,90 @@ pub fn render_settings_modal(
     let list_hover = cx.theme().list_hover;
     let input_bg = cx.theme().secondary;
 
-    deferred(
-        div()
-            .id("settings-backdrop")
-            .absolute()
-            .top_0()
-            .left_0()
-            .size_full()
-            .bg(hsla(0.0, 0.0, 0.0, 0.6 * opacity))
-            .flex()
-            .items_center()
-            .justify_center()
-            .on_mouse_down(
-                MouseButton::Left,
-                cx.listener(|this, _, _, cx| {
-                    this.settings_backdrop_clicked = true;
-                    cx.notify();
-                }),
-            )
-            .on_mouse_up(
-                MouseButton::Left,
-                cx.listener(|this, _, window, cx| {
-                    if this.settings_backdrop_clicked {
-                        this.show_settings = false;
-                        this.settings_backdrop_clicked = false;
-                        this.focus.force_canvas_focus(window);
-                    }
-                    cx.notify();
-                }),
-            )
-            .on_scroll_wheel(cx.listener(|_, _, _, _| {}))
-            .child(
-                h_flex()
-                    .id("settings-modal")
-                    .track_focus(modal_focus)
-                    .key_context(FocusContext::KEY_MODAL)
-                    .on_mouse_down(
-                        MouseButton::Left,
-                        cx.listener(|this, _, _, _| {
-                            this.settings_backdrop_clicked = false;
-                        }),
-                    )
-                    .on_mouse_up(
-                        MouseButton::Left,
-                        cx.listener(|this, _, _, _| {
-                            this.settings_backdrop_clicked = false;
-                        }),
-                    )
-                    .w(px(680.0))
-                    .h(px(480.0))
-                    .bg(bg.opacity(opacity))
-                    .border_1()
-                    .border_color(border.opacity(opacity))
-                    .rounded(px(10.0))
-                    .overflow_hidden()
-                    .shadow_lg()
-                    .on_scroll_wheel(|_, _, _| {})
-                    .on_action(cx.listener(|this, _: &OpenSettings, window, cx| {
-                        this.toggle_settings(window, cx);
-                    }))
-                    .on_action(cx.listener(|this, _: &ModalFocusNext, window, cx| {
-                        this.modal_focus_next(window, cx);
-                    }))
-                    .on_action(cx.listener(|this, _: &ModalFocusPrev, window, cx| {
-                        this.modal_focus_prev(window, cx);
-                    }))
-                    // Left sidebar
-                    .child(render_settings_sidebar(active_tab, title_bar, border, fg, muted_fg, list_active, list_hover, cx))
-                    // Right content area
-                    .child(render_settings_content(
-                        active_tab,
-                        &current_theme_display,
-                        &current_font_display,
-                        &themes,
-                        &fonts,
-                        bg,
-                        border,
-                        fg,
-                        muted_fg,
-                        input_bg,
-                        list_active,
-                        list_hover,
-                        cx,
-                    )),
-            ),
+    // Build sidebar first (doesn't capture cx in closures)
+    let sidebar = render_settings_sidebar(
+        active_tab, title_bar, border, fg, muted_fg, list_active, list_hover, cx,
+    );
+    
+    // Create action handlers before building content
+    let on_toggle_settings = cx.listener(|this, _: &OpenSettings, window, cx| {
+        this.toggle_settings(window, cx);
+    });
+    let on_focus_next = cx.listener(|this, _: &ModalFocusNext, window, cx| {
+        this.modal_focus_next(window, cx);
+    });
+    let on_focus_prev = cx.listener(|this, _: &ModalFocusPrev, window, cx| {
+        this.modal_focus_prev(window, cx);
+    });
+    
+    // Build content after creating handlers
+    let content = render_settings_content(
+        active_tab,
+        &current_theme_display,
+        &current_font_display,
+        &themes,
+        &fonts,
+        bg,
+        border,
+        fg,
+        muted_fg,
+        input_bg,
+        list_active,
+        list_hover,
+        cx,
+    );
+    
+    // Build modal with backdrop click handlers
+    let modal_with_handlers = modal_intercept_backdrop_clicks_stateful(
+        h_flex()
+            .id("settings-modal")
+            .track_focus(modal_focus)
+            .key_context(FocusContext::KEY_MODAL)
+            .w(px(MODAL_WIDTH_LG))
+            .h(px(MODAL_HEIGHT_MD))
+            .bg(bg.opacity(opacity))
+            .border_1()
+            .border_color(border.opacity(opacity))
+            .rounded(px(10.0))
+            .overflow_hidden()
+            .shadow_lg()
+            .on_scroll_wheel(|_, _, _| {})
+            .on_action(on_toggle_settings)
+            .on_action(on_focus_next)
+            .on_action(on_focus_prev)
+            .child(sidebar)
+            .child(content),
+        cx,
+        // Modal mouse down: reset flag
+        |this, _, _, _| {
+            this.settings.backdrop_clicked = false;
+        },
+        // Modal mouse up: reset flag
+        |this, _, _, _| {
+            this.settings.backdrop_clicked = false;
+        },
+    );
+    
+    render_modal_backdrop(
+        "settings-backdrop",
+        opacity,
+        cx,
+        // Backdrop mouse down: set flag
+        |this, _, _, cx| {
+            this.settings.backdrop_clicked = true;
+            cx.notify();
+        },
+        // Backdrop mouse up: close if flag is set
+        |this, _, window, cx| {
+            if this.settings.backdrop_clicked {
+                this.settings.show = false;
+                this.system.focus.force_canvas_focus(window);
+            }
+            this.settings.backdrop_clicked = false;
+            cx.notify();
+        },
+        modal_with_handlers,
     )
-    .with_priority(1500)
 }
 
 fn render_settings_sidebar(
@@ -149,77 +198,31 @@ fn render_settings_sidebar(
         .p_2()
         .gap_1()
         // Appearance tab
-        .child(
-            div()
-                .id("tab-appearance")
-                .w_full()
-                .px_2()
-                .py_1p5()
-                .rounded(px(4.0))
-                .cursor(CursorStyle::PointingHand)
-                .when(active_tab == SettingsTab::Appearance, |d| d.bg(list_active))
-                .when(active_tab != SettingsTab::Appearance, |d| {
-                    d.hover(|s| s.bg(list_hover))
-                })
-                .on_mouse_down(
-                    MouseButton::Left,
-                    cx.listener(|this, _, _, cx| {
-                        this.set_settings_tab(SettingsTab::Appearance, cx);
-                    }),
-                )
-                .child(
-                    h_flex()
-                        .gap_2()
-                        .items_center()
-                        .child(
-                            Icon::new(IconName::Palette)
-                                .size(px(14.0))
-                                .text_color(if active_tab == SettingsTab::Appearance { fg } else { muted_fg }),
-                        )
-                        .child(
-                            div()
-                                .text_sm()
-                                .text_color(if active_tab == SettingsTab::Appearance { fg } else { muted_fg })
-                                .child("Appearance"),
-                        ),
-                ),
-        )
+        .child(render_settings_tab_button(
+            "tab-appearance",
+            SettingsTab::Appearance,
+            active_tab,
+            IconName::Palette,
+            "Appearance",
+            fg,
+            muted_fg,
+            list_active,
+            list_hover,
+            cx,
+        ))
         // Integrations tab
-        .child(
-            div()
-                .id("tab-integrations")
-                .w_full()
-                .px_2()
-                .py_1p5()
-                .rounded(px(4.0))
-                .cursor(CursorStyle::PointingHand)
-                .when(active_tab == SettingsTab::Integrations, |d| d.bg(list_active))
-                .when(active_tab != SettingsTab::Integrations, |d| {
-                    d.hover(|s| s.bg(list_hover))
-                })
-                .on_mouse_down(
-                    MouseButton::Left,
-                    cx.listener(|this, _, _, cx| {
-                        this.set_settings_tab(SettingsTab::Integrations, cx);
-                    }),
-                )
-                .child(
-                    h_flex()
-                        .gap_2()
-                        .items_center()
-                        .child(
-                            Icon::new(IconName::Settings)
-                                .size(px(14.0))
-                                .text_color(if active_tab == SettingsTab::Integrations { fg } else { muted_fg }),
-                        )
-                        .child(
-                            div()
-                                .text_sm()
-                                .text_color(if active_tab == SettingsTab::Integrations { fg } else { muted_fg })
-                                .child("Integrations"),
-                        ),
-                ),
-        )
+        .child(render_settings_tab_button(
+            "tab-integrations",
+            SettingsTab::Integrations,
+            active_tab,
+            IconName::Settings,
+            "Integrations",
+            fg,
+            muted_fg,
+            list_active,
+            list_hover,
+            cx,
+        ))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -259,14 +262,18 @@ fn render_settings_content(
                     .child(render_setting_row(
                         "Theme",
                         "Choose a color theme for the interface",
-                        render_theme_dropdown(&current_theme_clone, fg, muted_fg, input_bg, border, cx),
+                        render_theme_dropdown(
+                            &current_theme_clone, fg, muted_fg, input_bg, border, cx,
+                        ),
                         cx,
                     ))
                     .child(render_section_header("Font", cx))
                     .child(render_setting_row(
                         "Font Family",
                         "Choose a font for the interface",
-                        render_font_dropdown(&current_font_clone, fg, muted_fg, input_bg, border, cx),
+                        render_font_dropdown(
+                            &current_font_clone, fg, muted_fg, input_bg, border, cx,
+                        ),
                         cx,
                     )),
             )
@@ -285,10 +292,30 @@ fn render_settings_content(
         })
         // Theme dropdown menu
         .when(cx.try_global::<ThemeDropdownOpen>().is_some(), |d| {
-            d.child(render_theme_dropdown_menu(&themes_clone, &current_theme_clone, bg, border, fg, muted_fg, list_active, list_hover, cx))
+            d.child(render_theme_dropdown_menu(
+                &themes_clone,
+                &current_theme_clone,
+                bg,
+                border,
+                fg,
+                muted_fg,
+                list_active,
+                list_hover,
+                cx,
+            ))
         })
         // Font dropdown menu
         .when(cx.try_global::<FontDropdownOpen>().is_some(), |d| {
-            d.child(render_font_dropdown_menu(&fonts_clone, &current_font_clone, bg, border, fg, muted_fg, list_active, list_hover, cx))
+            d.child(render_font_dropdown_menu(
+                &fonts_clone,
+                &current_font_clone,
+                bg,
+                border,
+                fg,
+                muted_fg,
+                list_active,
+                list_hover,
+                cx,
+            ))
         })
 }

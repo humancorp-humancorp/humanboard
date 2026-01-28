@@ -1,3 +1,4 @@
+use crate::pdf::pdfium_loader::PdfiumLoader;
 use pdfium_render::prelude::*;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
@@ -17,7 +18,7 @@ pub struct PdfDocument {
 impl PdfDocument {
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self, String> {
         let pdf_path = path.as_ref().to_path_buf();
-        let pdfium = Self::load_pdfium()?;
+        let pdfium = PdfiumLoader::load()?;
 
         let document = pdfium
             .load_pdf_from_file(&pdf_path, None)
@@ -35,55 +36,6 @@ impl PdfDocument {
         })
     }
 
-    fn load_pdfium() -> Result<Pdfium, String> {
-        // Try to load from lib/ directory first (development)
-        let lib_path = std::env::current_dir()
-            .ok()
-            .map(|p| p.join("lib/libpdfium.dylib"));
-
-        if let Some(path) = lib_path {
-            if path.exists() {
-                if let Ok(bindings) = Pdfium::bind_to_library(&path) {
-                    return Ok(Pdfium::new(bindings));
-                }
-            }
-        }
-
-        // Try relative to executable
-        let exe_path = std::env::current_exe()
-            .ok()
-            .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-            .map(|p| p.join("lib/libpdfium.dylib"));
-
-        if let Some(path) = exe_path {
-            if path.exists() {
-                if let Ok(bindings) = Pdfium::bind_to_library(&path) {
-                    return Ok(Pdfium::new(bindings));
-                }
-            }
-        }
-
-        // Try macOS bundle Resources folder
-        let bundle_path = std::env::current_exe()
-            .ok()
-            .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-            .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-            .map(|p| p.join("Resources/lib/libpdfium.dylib"));
-
-        if let Some(path) = bundle_path {
-            if path.exists() {
-                if let Ok(bindings) = Pdfium::bind_to_library(&path) {
-                    return Ok(Pdfium::new(bindings));
-                }
-            }
-        }
-
-        // Fallback to system library
-        Pdfium::bind_to_system_library()
-            .map(Pdfium::new)
-            .map_err(|e| format!("Failed to load pdfium: {:?}", e))
-    }
-
     /// Render a single page and cache it. Returns path to the cached PNG.
     fn render_page(&mut self, page_num: usize) -> Option<PathBuf> {
         // Use zoom level as cache key (rounded to avoid too many cache entries)
@@ -98,7 +50,7 @@ impl PdfDocument {
         }
 
         // Render the page
-        let pdfium = Self::load_pdfium().ok()?;
+        let pdfium = PdfiumLoader::load().ok()?;
         let document = pdfium.load_pdf_from_file(&self.pdf_path, None).ok()?;
         let page = document.pages().get(page_num as u16).ok()?;
 

@@ -587,26 +587,7 @@ impl BoardIndex {
     }
 }
 
-/// Simple UUID generation without external dependency
+/// Generate a cryptographically secure UUID v4.
 fn generate_uuid() -> String {
-    use std::collections::hash_map::RandomState;
-    use std::hash::{BuildHasher, Hasher};
-
-    let state = RandomState::new();
-    let mut hasher = state.build_hasher();
-
-    // Hash current time and some random state
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default();
-    hasher.write_u128(now.as_nanos());
-
-    let hash1 = hasher.finish();
-
-    let state2 = RandomState::new();
-    let mut hasher2 = state2.build_hasher();
-    hasher2.write_u64(hash1);
-    let hash2 = hasher2.finish();
-
-    format!("{:016x}{:016x}", hash1, hash2)
+    uuid::Uuid::new_v4().to_string()
 }
