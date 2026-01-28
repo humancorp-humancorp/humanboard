@@ -584,8 +584,8 @@ impl Humanboard {
                     SplitDirection::Vertical => base
                         .flex()
                         .flex_row()
-                        .pt(px(40.0))
-                        .pb(px(28.0))
+                        .pt(px(48.0))
+                        .pb(px(36.0))
                         .child(render_tool_dock(
                             selected_tool,
                             |this, tool, _, cx| {
@@ -719,8 +719,8 @@ impl Humanboard {
                     SplitDirection::Horizontal => base
                         .flex()
                         .flex_row()
-                        .pt(px(40.0))
-                        .pb(px(28.0))
+                        .pt(px(48.0))
+                        .pb(px(36.0))
                         .child(render_tool_dock(
                             selected_tool,
                             |this, tool, _, cx| {
@@ -853,8 +853,8 @@ impl Humanboard {
             None => base
                 .flex()
                 .flex_row()
-                .pt(px(40.0))
-                .pb(px(28.0))
+                .pt(px(48.0))
+                .pb(px(36.0))
                 .child(render_tool_dock(
                     selected_tool,
                     |this, tool, _, cx| {

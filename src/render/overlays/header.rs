@@ -35,14 +35,14 @@ pub fn render_header_bar(
         .top_0()
         .left_0()
         .right_0()
-        .h(px(40.0))
+        .h(px(48.0))
         .bg(bg)
         .border_b_1()
         .border_color(border)
         .items_center()
         .justify_between()
-        .pl(px(80.0))
-        .pr_4()
+        .pl(px(84.0))
+        .pr_5()
         // Left side - board name and home button
         .child(render_header_left(board_name, fg, muted, muted_fg, cx))
         // Center - command palette
@@ -70,14 +70,14 @@ fn render_header_left(
     cx: &mut Context<Humanboard>,
 ) -> Div {
     h_flex()
-        .gap_3()
+        .gap_4()
         .items_center()
         .child(
             div()
                 .id("go-home-btn")
-                .px_2()
-                .py_1()
-                .rounded(px(4.0))
+                .px_3()
+                .py_1p5()
+                .rounded(px(6.0))
                 .cursor(CursorStyle::PointingHand)
                 .hover(|s| s.bg(muted.opacity(0.5)))
                 .active(|s| s.bg(muted.opacity(0.7)))
@@ -99,23 +99,23 @@ fn render_header_left(
 
 fn render_header_right(muted_fg: Hsla, list_hover: Hsla, cx: &mut Context<Humanboard>) -> Div {
     h_flex()
-        .gap_2()
+        .gap_3()
         // Add button
         .child(
             div()
                 .id("add-item-btn")
-                .px_2()
-                .py_1()
-                .rounded(px(4.0))
+                .px_3()
+                .py_1p5()
+                .rounded(px(6.0))
                 .cursor(CursorStyle::PointingHand)
                 .hover(|s| s.bg(list_hover))
                 .text_sm()
                 .text_color(muted_fg)
                 .child(
                     h_flex()
-                        .gap_1()
+                        .gap_2()
                         .items_center()
-                        .child(Icon::new(IconName::Plus).size(px(14.0)).text_color(muted_fg))
+                        .child(Icon::new(IconName::Plus).size(px(16.0)).text_color(muted_fg))
                         .child("Add"),
                 )
                 .on_click(cx.listener(|this, _, window, cx| {
@@ -126,12 +126,12 @@ fn render_header_right(muted_fg: Hsla, list_hover: Hsla, cx: &mut Context<Humanb
         .child(
             div()
                 .id("settings-btn")
-                .px_2()
-                .py_1()
-                .rounded(px(4.0))
+                .px_3()
+                .py_1p5()
+                .rounded(px(6.0))
                 .cursor(CursorStyle::PointingHand)
                 .hover(|s| s.bg(list_hover))
-                .child(Icon::new(IconName::Settings).size(px(14.0)).text_color(muted_fg))
+                .child(Icon::new(IconName::Settings).size(px(16.0)).text_color(muted_fg))
                 .on_click(cx.listener(|this, _, window, cx| {
                     this.toggle_settings(window, cx);
                 })),
@@ -140,9 +140,9 @@ fn render_header_right(muted_fg: Hsla, list_hover: Hsla, cx: &mut Context<Humanb
         .child(
             div()
                 .id("show-shortcuts-btn")
-                .px_2()
-                .py_1()
-                .rounded(px(4.0))
+                .px_3()
+                .py_1p5()
+                .rounded(px(6.0))
                 .cursor(CursorStyle::PointingHand)
                 .hover(|s| s.bg(list_hover))
                 .text_sm()
@@ -178,15 +178,15 @@ pub fn render_footer_bar(
         .bottom_0()
         .left_0()
         .right_0()
-        .h(px(28.0))
+        .h(px(36.0))
         .bg(bg)
         .border_t_1()
         .border_color(border)
         .items_center()
         .justify_between()
-        .px_4()
-        .gap_6()
-        .text_xs()
+        .px_5()
+        .gap_8()
+        .text_sm()
         .text_color(muted_fg)
         .child(
             h_flex()
@@ -213,7 +213,7 @@ pub fn render_footer_bar(
         // Right side: selected item name and help hints
         .child(
             h_flex()
-                .gap_4()
+                .gap_5()
                 .items_center()
                 .when_some(selected_item_name, |d, name| {
                     d.child(div().text_color(fg).child(name))
@@ -222,11 +222,11 @@ pub fn render_footer_bar(
                 .child(
                     h_flex()
                         .id("help-hint-search")
-                        .gap_1()
+                        .gap_2()
                         .items_center()
-                        .px(px(6.0))
-                        .py(px(2.0))
-                        .rounded(px(4.0))
+                        .px(px(8.0))
+                        .py(px(3.0))
+                        .rounded(px(6.0))
                         .cursor_pointer()
                         .hover(|s| s.bg(muted))
                         .on_click(cx.listener(|this, _, window, cx| {
@@ -234,26 +234,26 @@ pub fn render_footer_bar(
                         }))
                         .child(
                             div()
-                                .px(px(4.0))
-                                .py(px(1.0))
+                                .px(px(6.0))
+                                .py(px(2.0))
                                 .bg(muted)
                                 .border_1()
                                 .border_color(border)
-                                .rounded(px(3.0))
+                                .rounded(px(4.0))
                                 .text_xs()
                                 .child("⌘K"),
                         )
                         .child(div().text_color(muted_fg).child("Search")),
                 )
-                // Help hint: ? for shortcuts
+                // Help hint: Cmd+? for shortcuts
                 .child(
                     h_flex()
                         .id("help-hint-shortcuts")
-                        .gap_1()
+                        .gap_2()
                         .items_center()
-                        .px(px(6.0))
-                        .py(px(2.0))
-                        .rounded(px(4.0))
+                        .px(px(8.0))
+                        .py(px(3.0))
+                        .rounded(px(6.0))
                         .cursor_pointer()
                         .hover(|s| s.bg(muted))
                         .on_click(cx.listener(|this, _, _, cx| {
@@ -263,13 +263,13 @@ pub fn render_footer_bar(
                         .child(
                             div()
                                 .px(px(6.0))
-                                .py(px(1.0))
+                                .py(px(2.0))
                                 .bg(muted)
                                 .border_1()
                                 .border_color(border)
-                                .rounded(px(3.0))
+                                .rounded(px(4.0))
                                 .text_xs()
-                                .child("?"),
+                                .child("⌘/"),
                         )
                         .child(div().text_color(muted_fg).child("Help")),
                 ),

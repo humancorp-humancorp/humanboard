@@ -95,16 +95,16 @@ fn render_palette_trigger(
     div()
         .id("cmd-palette-trigger")
         .w_full()
-        .h(px(28.0))
+        .h(px(36.0))
         .bg(input_bg)
         .border_1()
         .border_color(if is_open { primary } else { border })
-        .rounded(px(6.0))
-        .px_3()
+        .rounded(px(8.0))
+        .px_4()
         .flex()
         .items_center()
-        .gap_2()
-        .child(Icon::new(IconName::Search).size(px(14.0)).text_color(muted_fg))
+        .gap_5()
+        .child(div().mr(px(4.0)).child(Icon::new(IconName::Search).size(px(16.0)).text_color(muted_fg)))
         .when(is_open, |d| {
             if let Some(input) = command_palette {
                 d.child(Input::new(input).w_full().appearance(false).cleanable(false))
@@ -119,8 +119,7 @@ fn render_palette_trigger(
                 .on_click(cx.listener(|this, _, window, cx| {
                     this.show_command_palette(window, cx);
                 }))
-                .child(div().text_sm().text_color(muted_fg).child("Search items or type command..."))
-                .child(div().ml_auto().text_xs().text_color(muted_fg).child("Cmd+K"))
+                .child(div().ml_auto().text_sm().text_color(muted_fg).child("⌘K"))
         })
 }
 
@@ -145,10 +144,10 @@ fn render_palette_dropdown(
 
     v_flex()
         .absolute()
-        .top(px(36.0))
+        .top(px(44.0))
         .left_0()
         .w_full()
-        .max_h(px(280.0))
+        .max_h(px(320.0))
         .bg(popover_bg)
         .border_1()
         .border_color(border)
@@ -158,9 +157,9 @@ fn render_palette_dropdown(
         .when(has_results, |d| {
             d.child(
                 div()
-                    .px_2()
-                    .pt_2()
-                    .pb_1()
+                    .px_3()
+                    .pt_3()
+                    .pb_2()
                     .text_xs()
                     .font_weight(FontWeight::MEDIUM)
                     .text_color(muted_fg)
@@ -177,6 +176,7 @@ fn render_palette_dropdown(
 
 #[allow(clippy::too_many_arguments)]
 fn render_dropdown_results(
+    // Increased spacing for better readability
     search_results: &[(u64, String)],
     selected_result: usize,
     scroll_handle: &ScrollHandle,
@@ -206,10 +206,10 @@ fn render_dropdown_results(
 
             h_flex()
                 .id(ElementId::Integer(idx as u64))
-                .pl(px(6.0))
-                .pr_2()
-                .py_1()
-                .gap_2()
+                .pl(px(10.0))
+                .pr_3()
+                .py_2()
+                .gap_3()
                 .rounded(px(4.0))
                 .cursor(CursorStyle::PointingHand)
                 .when(is_selected, |d| d.bg(list_active).border_l_2().border_color(primary))
@@ -230,7 +230,7 @@ fn render_dropdown_results(
                 )
                 .child(
                     Icon::new(if is_theme_mode { IconName::Palette } else { IconName::File })
-                        .size(px(12.0))
+                        .size(px(14.0))
                         .text_color(if is_selected { primary } else { muted_fg }),
                 )
                 .child(
@@ -271,9 +271,9 @@ fn render_dropdown_commands(
         .border_color(border)
         .child(
             div()
-                .px_2()
-                .pt_2()
-                .pb_1()
+                .px_3()
+                .pt_3()
+                .pb_2()
                 .text_xs()
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(muted_fg)
@@ -281,19 +281,19 @@ fn render_dropdown_commands(
         )
         .child(
             h_flex()
-                .px_2()
-                .py_1()
-                .mx_1()
-                .gap_2()
-                .rounded(px(4.0))
+                .px_3()
+                .py_2()
+                .mx_2()
+                .gap_3()
+                .rounded(px(6.0))
                 .hover(|s| s.bg(list_hover))
                 .cursor(CursorStyle::PointingHand)
                 .child(
                     div()
-                        .px(px(6.0))
-                        .py(px(2.0))
+                        .px(px(8.0))
+                        .py(px(3.0))
                         .bg(success.opacity(0.15))
-                        .rounded(px(3.0))
+                        .rounded(px(4.0))
                         .text_xs()
                         .font_weight(FontWeight::MEDIUM)
                         .text_color(success)
@@ -304,11 +304,11 @@ fn render_dropdown_commands(
         )
         .child(
             h_flex()
-                .px_2()
-                .py_1()
-                .mx_1()
-                .gap_2()
-                .rounded(px(4.0))
+                .px_3()
+                .py_2()
+                .mx_2()
+                .gap_3()
+                .rounded(px(6.0))
                 .hover(|s| s.bg(list_hover))
                 .cursor(CursorStyle::PointingHand)
                 .on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| {
@@ -316,10 +316,10 @@ fn render_dropdown_commands(
                 }))
                 .child(
                     div()
-                        .px(px(6.0))
-                        .py(px(2.0))
+                        .px(px(8.0))
+                        .py(px(3.0))
                         .bg(primary.opacity(0.15))
-                        .rounded(px(3.0))
+                        .rounded(px(4.0))
                         .text_xs()
                         .font_weight(FontWeight::MEDIUM)
                         .text_color(primary)
@@ -331,9 +331,9 @@ fn render_dropdown_commands(
 
 fn render_dropdown_footer(border: Hsla, title_bar: Hsla, muted: Hsla, muted_fg: Hsla) -> Div {
     h_flex()
-        .px_2()
-        .py_1()
-        .gap_3()
+        .px_3()
+        .py_2()
+        .gap_4()
         .border_t_1()
         .border_color(border)
         .bg(title_bar)
@@ -341,20 +341,20 @@ fn render_dropdown_footer(border: Hsla, title_bar: Hsla, muted: Hsla, muted_fg: 
         .text_color(muted_fg)
         .child(
             h_flex()
-                .gap_1()
-                .child(div().px(px(4.0)).py(px(1.0)).bg(muted).rounded(px(2.0)).child("↑↓"))
+                .gap_2()
+                .child(div().px(px(6.0)).py(px(2.0)).bg(muted).rounded(px(3.0)).child("↑↓"))
                 .child("navigate"),
         )
         .child(
             h_flex()
-                .gap_1()
-                .child(div().px(px(4.0)).py(px(1.0)).bg(muted).rounded(px(2.0)).child("↵"))
+                .gap_2()
+                .child(div().px(px(6.0)).py(px(2.0)).bg(muted).rounded(px(3.0)).child("↵"))
                 .child("select"),
         )
         .child(
             h_flex()
-                .gap_1()
-                .child(div().px(px(4.0)).py(px(1.0)).bg(muted).rounded(px(2.0)).child("esc"))
+                .gap_2()
+                .child(div().px(px(6.0)).py(px(2.0)).bg(muted).rounded(px(3.0)).child("esc"))
                 .child("close"),
         )
 }

@@ -29,10 +29,10 @@ fn render_tool_button(
 
     div()
         .id(ElementId::Name(format!("tool-{:?}", tool).into()))
-        .w(px(32.0))
-        .h(px(32.0))
-        .my(px(2.0))
-        .rounded(px(6.0))
+        .w(px(40.0))
+        .h(px(40.0))
+        .my(px(3.0))
+        .rounded(px(8.0))
         .bg(bg)
         .hover(|s| s.bg(if selected { bg } else { hover_bg }))
         // Focus ring for keyboard navigation (WCAG compliance)
@@ -43,7 +43,7 @@ fn render_tool_button(
         .justify_center()
         .child(
             div()
-                .text_size(px(13.0))
+                .text_size(px(16.0))
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(fg)
                 .child(label),
@@ -75,8 +75,8 @@ where
         .flex()
         .flex_col()
         .items_center()
-        .py(px(8.0))
-        .gap(px(4.0))
+        .py(px(16.0))
+        .gap(px(6.0))
         .border_r_1()
         .border_color(border_color)
         // Selection tool
@@ -111,9 +111,9 @@ where
         // Divider for data visualization tools
         .child(
             div()
-                .w(px(24.0))
+                .w(px(28.0))
                 .h(px(1.0))
-                .my(px(4.0))
+                .my(px(6.0))
                 .bg(divider_color)
         )
         // Table tool
